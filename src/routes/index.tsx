@@ -1,3 +1,4 @@
+// Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { Link, createFileRoute } from '@tanstack/react-router'
 import {
   AlertTriangle,
@@ -63,8 +64,8 @@ function Overzicht() {
       {/* Hero */}
       <section className="relative isolate overflow-hidden bg-nat-ink text-white">
         <img
-          src="/.netlify/images?url=/img/hero-zwembad.png&w=1600&fm=webp&q=70"
-          srcSet="/.netlify/images?url=/img/hero-zwembad.png&w=800&fm=webp&q=70 800w, /.netlify/images?url=/img/hero-zwembad.png&w=1600&fm=webp&q=70 1600w"
+          src="/img/hero-zwembad-1376.webp"
+          srcSet="/img/hero-zwembad-800.webp 800w, /img/hero-zwembad-1376.webp 1376w"
           sizes="100vw"
           alt=""
           className="absolute inset-0 -z-10 h-full w-full object-cover opacity-45"

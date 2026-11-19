@@ -1,3 +1,4 @@
+<!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
 This document describes the project for developers and AI agents working on this codebase.
@@ -6,21 +7,29 @@ This document describes the project for developers and AI agents working on this
 
 **NatUtrecht Trainersapp**: a Dutch-language app for the ~8 trainers of swim club Nat Utrecht. It covers the trainer roster (who coaches which group at which session), the season plan (jaarplan) with publish flow, and a shared training log. The UI copy is Dutch; code identifiers in `src/data` are Dutch too (`trainer`, `sessie`, `groep`, `periode`, …).
 
-**Current state: milestone 1 of [PLAN.md](PLAN.md).** All screens are built and interactive, but data comes from fixtures in `src/data/fixtures.ts` and lives in an in-memory client store (`src/data/store.ts`) that resets on reload. There is no backend, database, or auth yet. **Continue from PLAN.md, starting at milestone 2** (Netlify Database), then Identity, Blobs, etc.
+**Current state: milestones 1–3 of [PLAN.md](PLAN.md).** The app is a static SPA on Firebase Hosting. Data lives in Firestore and is synced live into a client store (`src/data/store.ts`); login is Firebase Auth (email link + Google) with invite-only access. **Continue from PLAN.md at milestone 4.**
+
+### Working agreements (from the project owner)
+
+- Always start from the latest `main` of `github.com/bruindav/trainersapp`.
+- Every change goes on a new branch `fix-N` (numbered upwards). Put `Fix: fix-N` in a comment in every changed file where comments are allowed.
+- The owner reviews; after his approval the fix branch is merged into `main` (which deploys).
+- Specialist agents live in `.claude/agents/`: `ontwerp` (functional design), `bouw` (secure code + rules), `ui` (screen design).
 
 ### Tech Stack
 
 | Layer         | Technology                                          |
 | ------------- | --------------------------------------------------- |
-| Framework     | TanStack Start                                      |
-| Frontend      | React 19, TanStack Router                           |
+| Framework     | Vite SPA                                            |
+| Frontend      | React 19, TanStack Router (file-based)              |
+| Backend       | Firebase Auth + Firestore (rules in `firestore.rules`) |
 | Build         | Vite 8                                              |
 | Styling       | Tailwind CSS 4, theme variables in `src/styles.css` |
 | UI Components | shadcn/ui (Radix UI + Tailwind)                     |
 | Toasts        | sonner                                              |
 | Icons         | lucide-react                                        |
 | Language      | TypeScript 6.0 (strict mode)                        |
-| Deployment    | Netlify, via `@netlify/vite-plugin-tanstack-start`  |
+| Deployment    | Firebase Hosting via GitHub Actions (`.github/workflows/deploy.yml`) |
 
 ## Directory Structure
 
@@ -28,42 +37,52 @@ This document describes the project for developers and AI agents working on this
 ├── PLAN.md               # Product roadmap — read this first and continue from the next open milestone
 ├── public
 │   ├── logo.svg          # Nat Utrecht logo (also used as favicon)
-│   └── img/hero-zwembad.png  # Generated pool photo for the home hero (served via /.netlify/images)
+│   └── img/hero-zwembad-*.webp  # Pool photo for the home hero (800 / 1376 px)
 ├── src
 │   ├── components
-│   │   ├── app-shell.tsx     # Header (logo, nav, trainer switcher, mobile Sheet), footer, PageHeader
+│   │   ├── app-shell.tsx     # Header (logo, nav, account menu, mobile Sheet), footer, PageHeader
+│   │   ├── auth-schermen.tsx # Login, email-link confirm, first-time setup, no-access, loading screens
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
 │   ├── data
-│   │   ├── fixtures.ts       # ALL stub data + domain types (trainers, sessies, groepen, jaarplan, trainingen)
-│   │   └── store.ts          # useSyncExternalStore client store: selectors + actions over the fixtures
+│   │   ├── fixtures.ts       # Domain types, fixed club data (sessies, groepen), default jaarplan, AppData
+│   │   ├── auth.ts           # Firebase Auth state, access check, invite redemption, first-time setup
+│   │   └── store.ts          # useSyncExternalStore store fed by Firestore onSnapshot; selectors + write actions
+│   ├── firebase-config.ts    # Public Firebase web config (fill in per project)
 │   ├── lib
+│   │   ├── firebase.ts       # initializeApp, Auth, Firestore (offline cache), emulator switch
 │   │   ├── dates.ts          # ISO-date helpers (local calendar days), nl-NL formatting, ISO week numbers
 │   │   └── utils.ts          # cn()
 │   ├── routes
-│   │   ├── __root.tsx        # HTML shell (lang=nl, Montserrat), wraps pages in AppShell
+│   │   ├── __root.tsx        # Auth gate + AppShell around <Outlet/> (HTML shell is index.html)
 │   │   ├── index.tsx         # Overzicht / dashboard
 │   │   ├── rooster.tsx       # Weekly roster grid, assign dialog, 4-week distribution (?week=YYYY-MM-DD)
 │   │   ├── jaarplan.tsx      # Season timeline, periods (edit = hoofdtrainer only), publish dialog
-│   │   └── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
+│   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
+│   │   └── team.tsx          # Team list; hoofdtrainer invites, changes roles, removes trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
 ```
 
 `src/routeTree.gen.ts` is generated by the router plugin when the dev server or build runs. Don't edit it.
 
-Shared framework skill source lives in `frameworks/tanstack-start-react/.claude/skills` in this repository, separate from the standalone starter. Consult the matching framework/Netlify skills when available in a generated app; don't assume the starter contains a `.claude` directory.
+### Firestore data model
+
+| Path | Contents | Who may write |
+| ---- | -------- | ------------- |
+| `trainers/{uid}` | naam, initialen, kleur, rol, specialiteit, email | hoofdtrainer; self only via setup or invite |
+| `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp | hoofdtrainer (invitee may delete own on redeem) |
+| `config/setup` | hoofdtrainerUid — exists once the app is set up | first user, once |
+| `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
+| `afwezigheden/{id}` | trainerId, van, tot, reden | own or hoofdtrainer |
+| `trainingen/{id}` | training + aangemaaktDoor | any trainer (as self); delete own or hoofdtrainer |
+| `jaarplan/huidig` | the whole Jaarplan object | hoofdtrainer |
 
 ## Key Concepts
 
 ### File-Based Routing
 
-Route files in `src/routes/` define pages and endpoints:
-
-- `__root.tsx` wraps every page.
-- `index.tsx` is `/`.
-- `about.tsx` would be `/about`.
-- `api.*.ts` files are server API endpoints. See the `tanstack-start-api-routes` skill.
+Route files in `src/routes/` define pages: `__root.tsx` wraps every page, `index.tsx` is `/`, `about.tsx` would be `/about`. There is no server: all data access goes through the Firebase client SDK and is secured by `firestore.rules`.
 
 ### Theme Variables
 
@@ -97,37 +116,34 @@ Set the product's palette, heading/body fonts, and layout before building its sc
 - Use short color/opacity transitions. Add `motion-reduce:transition-none` or `motion-reduce:animate-none` when adding motion; don't make essential content depend on animation.
 - Provide loading, empty, error, and success states for each data-driven screen. Skeletons should follow the shape of the content they replace.
 
-### Routing and Server Data
+### Routing and Data
 
-Router types are registered in `src/router.tsx`, so use typed `Link` destinations and route parameters. The root route supplies the themed 404 page; the router's default error component supplies the safe retry/home page, including child-route SSR failures. Use `throw notFound()` for absent records; keep unexpected failures on the error path. See [routing conventions](src/routes/README.md).
+Router types are registered in `src/router.tsx`, so use typed `Link` destinations and route parameters. The root route supplies the themed 404 page; the router's default error component supplies the safe retry/home page.
 
-Start with route loaders and server functions for server data. Validate server-function input with `.validator(...)`, keep secrets on the server, and handle HTTP failures before returning data. See [the data-fetching pattern](docs/data-fetching.md). Add TanStack Query only when client-side caching, mutations, or background refresh are needed.
-
-### Browser Storage
-
-Pages are rendered on the server first, where `window` and `localStorage` don't exist. Read `localStorage` inside `useEffect`, not during render or in a `useState` initializer, or the first render will differ from the server HTML and React will log a hydration error.
+Pages read data synchronously via `useAppData()`; the root only renders pages once the first Firestore snapshots have arrived. Actions in `store.ts` write to Firestore and report failures with a toast; the UI updates through the listeners (Firestore applies local writes immediately). **Every permission must be enforced in `firestore.rules`** — hiding a button is not security. Add a rules test in `tests/firestore.rules.test.ts` for every rule change.
 
 ## Configuration Files
 
 | File             | Purpose                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------ |
-| `vite.config.ts` | Vite path aliases and Tailwind, Netlify, TanStack Start, React plugins                           |
+| `vite.config.ts` | Vite path aliases, TanStack Router plugin, Tailwind, React                                       |
 | `tsconfig.json`  | Strict TypeScript, with the `@/*` alias for `src/*`                                              |
-| `netlify.toml`   | Builds with `vite build`, publishes `dist/client`, dev server on port 8888 proxying Vite on 3000 |
+| `firebase.json`  | Hosting (`dist`, SPA rewrite, cache headers), Firestore rules, emulator ports                     |
+| `firestore.rules`| Firestore security rules — the real access control                                               |
 
 ## Development Commands
 
-Use Node 22.13+ on the Node 22 line, Node 24, or Node 26+. The installed lint and test tools set this minimum alongside the framework.
+Use Node 22.13+ or Node 24. Use pnpm 10 (pnpm 12 rejects the lockfile under its default minimum-release-age policy).
 
 ```bash
-npm run dev        # Start the Vite dev server on port 3000
-npm run build      # Production build
-npm run typecheck  # Type-check with tsc; the build doesn't
-npm run lint       # Check TypeScript and React Hooks rules
-npm run format:check # Check formatting
-npm run format     # Format project files
-npm test           # Run local form, control, and error page tests
-npm run preview    # Preview the production build
+pnpm dev           # Vite dev server on port 3000 (real Firebase project)
+pnpm dev:emulator  # Same, against local Auth + Firestore emulators (needs Java)
+pnpm build         # Production build into dist/ (also generates routeTree.gen.ts)
+pnpm typecheck     # Type-check with tsc; the build doesn't
+pnpm lint          # Check TypeScript and React Hooks rules
+pnpm test          # Unit, component and page smoke tests (run build first)
+pnpm test:rules    # Firestore rules tests in the emulator (needs Java)
+pnpm preview       # Preview the production build
 ```
 
 ## Conventions
@@ -137,17 +153,19 @@ npm run preview    # Preview the production build
 - TypeScript fails on unused locals and parameters, so remove what you don't use.
 - Use React hooks for state.
 - Run the dev server or build once to generate route types before type-checking a fresh copy.
-- Run build, typecheck, lint, format:check, and tests before reporting completion. Verify changed user flows locally; a passing build doesn't prove an interaction works.
+- Run build, typecheck, lint, tests and rules tests before reporting completion. Verify changed user flows locally; a passing build doesn't prove an interaction works.
 
 ## Product decisions (non-obvious)
 
 - **Brand**: colours taken from natutrecht.nl — logo red `#e64439` (`--primary`), ink `#2b2222`, Montserrat, and the six rainbow colours from the logo exposed as `bg-nat-*` / `text-nat-*` utilities and the `.nat-rainbow` stripe. Keep using theme variables, not raw hex, in components (trainer colours in fixtures are the exception).
 - **Sessions are real**: Tue & Thu 21:00–22:00 and Sun 11:00–12:00 at Zwembad De Kwakel (from the club site). Groups/lanes (Basis 1–2, Gevorderd 3–4, Wedstrijd 5–6) and trainer names are **placeholders** to be replaced with the real team.
 - **Roster model**: each slot = week × sessie × groep. A deterministic rotation (`rotatieTrainer`) proposes a trainer for every week; manual changes are stored as overrides keyed `weekStart|sessieId|groepId` (`null` = open slot). Keep this "rotation + overrides" model when moving to the database.
-- **Fixtures are relative to today** (the last 2–3 weeks of trainings, absences next week) so the demo always looks alive. The jaarplan uses fixed season dates 2026–2027 with the EuroGames Cardiff (14–17 Jul 2027) as goal; competition dates other than EuroGames are marked "onder voorbehoud".
-- **"Logged in" trainer** is simulated with the switcher in the header (`huidigeTrainerId`). Only role `Hoofdtrainer` may edit/publish the jaarplan. Replace with Netlify Identity roles in milestone 3.
-- **Uploads** only keep the file name for now; storing the file in Netlify Blobs is milestone 4.
-- Store state is module-level; the server snapshot is the initial fixture state, so SSR and first client render match.
+- **Roster rotation** runs over all trainers sorted by uid; adding or removing a trainer changes future proposals (manual overrides stay). A configurable rotation is milestone 5.
+- **Jaarplan**: on first-time setup `STANDAARD_JAARPLAN` (season 2026–2027, goal EuroGames Cardiff 14–17 Jul 2027) is written to `jaarplan/huidig`; competition dates other than EuroGames are "onder voorbehoud".
+- **Logged-in trainer** = Firebase uid (`huidigeTrainerId`). Only role `Hoofdtrainer` may edit/publish the jaarplan and manage the team; a hoofdtrainer can't change their own role or remove themselves, so one always remains.
+- **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.
+- **Removed trainers** show as "Oud-trainer" on their old trainings.
+- **Uploads** only keep the file name for now; storing files is milestone 4.
 
 ## Application Name
 

@@ -1,0 +1,79 @@
+# Fix: fix-1 — bouwen, testen en deployen naar Firebase Hosting + Firestore-regels
+name: Deploy
+
+on:
+  # Tests draaien op elke branch (ook fix-N); deployen alleen vanaf main.
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm test:rules
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: E-mail hoofdtrainer invullen in firestore.rules
+        env:
+          HOOFDTRAINER_EMAIL: ${{ vars.HOOFDTRAINER_EMAIL }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const email = (process.env.HOOFDTRAINER_EMAIL || "").trim().toLowerCase();
+            if (!email) { console.log("::warning::Variabele HOOFDTRAINER_EMAIL ontbreekt; eerste inrichting blijft geblokkeerd."); process.exit(0); }
+            if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) { console.error("Ongeldig HOOFDTRAINER_EMAIL"); process.exit(1); }
+            const r = fs.readFileSync("firestore.rules", "utf8");
+            fs.writeFileSync("firestore.rules", r.replace("__HOOFDTRAINER_EMAIL__", email));
+          '
+      - name: Deploy naar Firebase
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::warning::Secret FIREBASE_SERVICE_ACCOUNT ontbreekt; deploy overgeslagen."
+            exit 0
+          fi
+          SA="$RUNNER_TEMP/sa.json"
+          trap 'rm -f "$SA"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          PROJECT_ID=$(node -e "console.log(require(process.env.GOOGLE_APPLICATION_CREDENTIALS).project_id)")
+          pnpm exec firebase deploy --only hosting,firestore:rules --project "$PROJECT_ID" --non-interactive

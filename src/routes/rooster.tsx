@@ -1,3 +1,4 @@
+// Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, RotateCcw, UserX } from 'lucide-react'
 import { useState } from 'react'
@@ -13,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { GROEPEN, SESSIES, TRAINERS } from '@/data/fixtures'
+import { GROEPEN, SESSIES } from '@/data/fixtures'
 import {
   groepById,
   herstelRotatie,
@@ -259,7 +260,7 @@ function ToewijzenDialog({ slot, week, onClose }: { slot: RoosterSlot | null; we
               </DialogDescription>
             </DialogHeader>
             <ul className="-mx-2 max-h-[55vh] space-y-1 overflow-y-auto px-2" aria-label="Kies een trainer">
-              {TRAINERS.map((t) => {
+              {data.trainers.map((t) => {
                 const afw = isAfwezig(data, t.id, slot.datum)
                 const aantal = weekSlots.filter((s) => s.trainerId === t.id).length
                 const zelfdeMoment = weekSlots.find(
@@ -382,7 +383,7 @@ function Verdeling({ vanafWeek }: { vanafWeek: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {TRAINERS.map((t) => {
+              {data.trainers.map((t) => {
                 const counts = perWeek.map((slots) => slots.filter((s) => s.trainerId === t.id))
                 const totaal = counts.reduce((n, c) => n + c.length, 0)
                 return (

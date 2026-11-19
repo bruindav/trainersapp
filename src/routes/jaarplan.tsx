@@ -1,3 +1,4 @@
+// Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute } from '@tanstack/react-router'
 import { CalendarCheck2, Flag, Lock, Megaphone, PartyPopper, Pencil, Printer, Trophy } from 'lucide-react'
 import { useState } from 'react'
@@ -21,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { TRAINERS, type Evenement, type Periode } from '@/data/fixtures'
+import { type Evenement, type Periode } from '@/data/fixtures'
 import { huidigePeriode, publiceerJaarplan, trainerById, useAppData, werkPeriodeBij } from '@/data/store'
 import { daysBetween, formatLong, formatMonth, formatRange, formatShort, todayISO } from '@/lib/dates'
 import { cn } from '@/lib/utils'
@@ -216,7 +217,7 @@ function JaarplanPagina() {
           <DialogHeader>
             <DialogTitle>Jaarplan publiceren?</DialogTitle>
             <DialogDescription>
-              Versie {plan.versie + 1} wordt zichtbaar voor alle {TRAINERS.length} trainers en vervangt de huidige
+              Versie {plan.versie + 1} wordt zichtbaar voor alle {data.trainers.length} trainers en vervangt de huidige
               versie in hun overzicht.
             </DialogDescription>
           </DialogHeader>

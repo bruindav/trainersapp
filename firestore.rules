@@ -1,0 +1,220 @@
+// Fix: fix-1 — beveiligingsregels voor de NatUtrecht Trainersapp.
+//
+// Uitgangspunt: iedereen met de (publieke) Firebase-config kan een account
+// aanmaken. Toegang tot de data hangt daarom NIET af van "ingelogd zijn",
+// maar van het bestaan van een document trainers/{uid}.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Hulpfuncties -------------------------------------------------------
+
+    function ingelogd() {
+      return request.auth != null;
+    }
+    function trainerPad(uid) {
+      return /databases/$(database)/documents/trainers/$(uid);
+    }
+    function setupPad() {
+      return /databases/$(database)/documents/config/setup;
+    }
+    function isTrainer() {
+      return ingelogd() && exists(trainerPad(request.auth.uid));
+    }
+    function isHoofdtrainer() {
+      return isTrainer() && get(trainerPad(request.auth.uid)).data.rol == 'Hoofdtrainer';
+    }
+    // Zelfde, maar na de schrijfactie (nodig binnen de inrichtings-batch).
+    function isHoofdtrainerNa() {
+      return ingelogd()
+        && existsAfter(trainerPad(request.auth.uid))
+        && getAfter(trainerPad(request.auth.uid)).data.rol == 'Hoofdtrainer';
+    }
+    function geverifieerdEmail() {
+      return ingelogd()
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
+    }
+    function mijnEmail() {
+      return request.auth.token.email.lower();
+    }
+    // E-mailadres van de beoogde eerste hoofdtrainer. Wordt bij het deployen
+    // ingevuld vanuit de GitHub-variabele HOOFDTRAINER_EMAIL, zodat niemand
+    // anders de app kan "inrichten" vóór de hoofdtrainer dat doet.
+    function beoogdeHoofdtrainer() {
+      return '__HOOFDTRAINER_EMAIL__';
+    }
+    function uitnodigingPad(email) {
+      return /databases/$(database)/documents/uitnodigingen/$(email);
+    }
+    function isRol(r) {
+      return r in ['Hoofdtrainer', 'Trainer', 'Assistent-trainer'];
+    }
+    function isDatum(d) {
+      return d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+    function tekst(v, max) {
+      return v is string && v.size() <= max;
+    }
+    function geldigeTrainer(d) {
+      return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds'])
+        && tekst(d.naam, 80) && d.naam.size() > 0
+        && tekst(d.initialen, 3) && d.initialen.size() > 0
+        && tekst(d.kleur, 9) && d.kleur.matches('^#[0-9a-fA-F]{6}$')
+        && isRol(d.rol)
+        && tekst(d.specialiteit, 120)
+        && tekst(d.email, 254);
+    }
+
+    // --- Inrichting ---------------------------------------------------------
+
+    match /config/setup {
+      allow read: if ingelogd();
+      // Alleen de allereerste keer, samen met het eigen hoofdtrainer-document.
+      allow create: if geverifieerdEmail()
+        && mijnEmail() == beoogdeHoofdtrainer()
+        && !exists(setupPad())
+        && request.resource.data.keys().hasOnly(['hoofdtrainerUid', 'op'])
+        && request.resource.data.hoofdtrainerUid == request.auth.uid
+        && request.resource.data.op == request.time
+        && isHoofdtrainerNa();
+      allow update, delete: if false;
+    }
+
+    // --- Trainers -----------------------------------------------------------
+
+    match /trainers/{uid} {
+      allow read: if isTrainer() || (ingelogd() && request.auth.uid == uid);
+
+      allow create: if geldigeTrainer(request.resource.data)
+        && (!('sinds' in request.resource.data) || request.resource.data.sinds == request.time)
+        && (
+        // 1. De hoofdtrainer voegt iemand toe.
+        isHoofdtrainer()
+        // 2. Eerste inrichting: jezelf als hoofdtrainer, samen met config/setup.
+        || (geverifieerdEmail()
+            && mijnEmail() == beoogdeHoofdtrainer()
+            && uid == request.auth.uid
+            && !exists(setupPad())
+            && existsAfter(setupPad())
+            && request.resource.data.rol == 'Hoofdtrainer'
+            && request.resource.data.email == mijnEmail())
+        // 3. Een uitnodiging verzilveren: rol moet overeenkomen en de
+        //    uitnodiging wordt in dezelfde batch verwijderd.
+        || (geverifieerdEmail()
+            && uid == request.auth.uid
+            && exists(uitnodigingPad(mijnEmail()))
+            && !existsAfter(uitnodigingPad(mijnEmail()))
+            && request.resource.data.rol == get(uitnodigingPad(mijnEmail())).data.rol
+            && request.resource.data.email == mijnEmail())
+      );
+
+      // Alleen de hoofdtrainer wijzigt het team, en nooit zijn eigen rol:
+      // zo blijft er altijd minstens één hoofdtrainer over.
+      allow update: if isHoofdtrainer()
+        && geldigeTrainer(request.resource.data)
+        && (uid != request.auth.uid || request.resource.data.rol == resource.data.rol);
+      allow delete: if isHoofdtrainer() && uid != request.auth.uid;
+    }
+
+    // --- Uitnodigingen (id = e-mailadres in kleine letters) -----------------
+
+    match /uitnodigingen/{email} {
+      allow read: if isHoofdtrainer() || (geverifieerdEmail() && email == mijnEmail());
+      allow create, update: if isHoofdtrainer()
+        && email == email.lower()
+        && request.resource.data.keys().hasOnly(['email', 'naam', 'rol', 'kleur', 'specialiteit', 'uitgenodigdOp'])
+        && request.resource.data.email == email
+        && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
+        && isRol(request.resource.data.rol)
+        && tekst(request.resource.data.kleur, 9) && request.resource.data.kleur.matches('^#[0-9a-fA-F]{6}$')
+        && tekst(request.resource.data.specialiteit, 120)
+        && isDatum(request.resource.data.uitgenodigdOp);
+      allow delete: if isHoofdtrainer() || (geverifieerdEmail() && email == mijnEmail());
+    }
+
+    // --- Rooster ------------------------------------------------------------
+
+    match /roosterWijzigingen/{slot} {
+      allow read: if isTrainer();
+      allow create, update: if isTrainer()
+        && request.resource.data.keys().hasOnly(['weekStart', 'sessieId', 'groepId', 'trainerId', 'gewijzigdDoor', 'gewijzigdOp'])
+        && isDatum(request.resource.data.weekStart)
+        && tekst(request.resource.data.sessieId, 40)
+        && tekst(request.resource.data.groepId, 40)
+        && slot == request.resource.data.weekStart + '|' + request.resource.data.sessieId + '|' + request.resource.data.groepId
+        && (request.resource.data.trainerId == null || exists(trainerPad(request.resource.data.trainerId)))
+        && request.resource.data.gewijzigdDoor == request.auth.uid
+        && request.resource.data.gewijzigdOp == request.time;
+      allow delete: if isTrainer();
+    }
+
+    match /afwezigheden/{id} {
+      allow read: if isTrainer();
+      // Zelf melden volgt in mijlpaal 5; nu alleen eigen of door hoofdtrainer.
+      function geldigeAfwezigheid(d) {
+        return d.keys().hasOnly(['trainerId', 'van', 'tot', 'reden'])
+          && d.trainerId is string && exists(trainerPad(d.trainerId))
+          && isDatum(d.van) && isDatum(d.tot) && d.van <= d.tot
+          && tekst(d.reden, 200);
+      }
+      allow create: if isTrainer()
+        && (request.resource.data.trainerId == request.auth.uid || isHoofdtrainer())
+        && geldigeAfwezigheid(request.resource.data);
+      allow update: if isTrainer()
+        && (isHoofdtrainer()
+            || (resource.data.trainerId == request.auth.uid
+                && request.resource.data.trainerId == request.auth.uid))
+        && geldigeAfwezigheid(request.resource.data);
+      allow delete: if isTrainer() && (resource.data.trainerId == request.auth.uid || isHoofdtrainer());
+    }
+
+    // --- Trainingen ---------------------------------------------------------
+
+    match /trainingen/{id} {
+      allow read: if isTrainer();
+      allow create: if isTrainer()
+        && request.resource.data.keys().hasOnly([
+             'datum', 'sessieId', 'groepId', 'trainerId', 'titel', 'focus', 'blokken',
+             'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp'])
+        && isDatum(request.resource.data.datum)
+        && tekst(request.resource.data.sessieId, 40) && request.resource.data.sessieId.size() > 0
+        && tekst(request.resource.data.groepId, 40) && request.resource.data.groepId.size() > 0
+        && request.resource.data.trainerId is string
+        && exists(trainerPad(request.resource.data.trainerId))
+        && tekst(request.resource.data.titel, 200)
+        && request.resource.data.focus is list && request.resource.data.focus.size() <= 10
+        && request.resource.data.blokken is list && request.resource.data.blokken.size() <= 30
+        && tekst(request.resource.data.notities, 5000)
+        && (!('bijlage' in request.resource.data) || tekst(request.resource.data.bijlage, 255))
+        && request.resource.data.aangemaaktDoor == request.auth.uid
+        && request.resource.data.aangemaaktOp == request.time;
+      allow delete: if isTrainer() && (
+        resource.data.aangemaaktDoor == request.auth.uid
+        || resource.data.trainerId == request.auth.uid
+        || isHoofdtrainer()
+      );
+      allow update: if false;
+    }
+
+    // --- Jaarplan -----------------------------------------------------------
+
+    match /jaarplan/{id} {
+      allow read: if isTrainer();
+      allow create, update: if isHoofdtrainerNa()
+        && id == 'huidig'
+        && request.resource.data.keys().hasOnly([
+             'seizoen', 'van', 'tot', 'status', 'gepubliceerdOp', 'gepubliceerdDoor',
+             'versie', 'periodes', 'evenementen'])
+        && tekst(request.resource.data.seizoen, 40)
+        && isDatum(request.resource.data.van) && isDatum(request.resource.data.tot)
+        && request.resource.data.status in ['concept', 'gepubliceerd']
+        && request.resource.data.versie is int && request.resource.data.versie >= 0
+        && request.resource.data.periodes is list && request.resource.data.periodes.size() <= 30
+        && request.resource.data.evenementen is list && request.resource.data.evenementen.size() <= 100;
+      allow delete: if false;
+    }
+
+    // Al het overige is dicht.
+  }
+}

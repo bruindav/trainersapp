@@ -1,3 +1,4 @@
+// Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ClipboardPlus,
@@ -30,7 +31,6 @@ import {
   GROEPEN,
   ONDERDELEN,
   SESSIES,
-  TRAINERS,
   sessieDatum,
   type Focus,
   type Training,
@@ -193,7 +193,7 @@ function TrainingenPagina() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="alle">Alle trainers</SelectItem>
-                  {TRAINERS.map((t) => (
+                  {data.trainers.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.naam}
                       {t.id === data.huidigeTrainerId ? ' (jij)' : ''}
@@ -589,7 +589,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TRAINERS.map((t) => (
+              {data.trainers.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
                   {t.naam}
                 </SelectItem>

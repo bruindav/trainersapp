@@ -1,11 +1,7 @@
-/**
- * VOORBEELDDATA — alle stub-data van de app staat in dit ene bestand.
- *
- * In een volgende mijlpaal (zie PLAN.md) wordt dit vervangen door echte
- * opslag in Netlify Database. Houd de vormen (types) hieronder aan als
- * startpunt voor het databaseschema.
- */
-import { addDays, startOfWeek, todayISO } from '@/lib/dates'
+// Fix: fix-1 — voorbeelddata vervangen door Firestore; dit bestand bevat nu
+// de domeintypes, de vaste clubgegevens (sessies, groepen) en het
+// standaard-jaarplan waarmee de app bij de eerste inrichting start.
+import { addDays } from '@/lib/dates'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,7 +16,32 @@ export interface Trainer {
   kleur: string
   rol: TrainerRol
   specialiteit: string
+  email?: string
 }
+
+export const ALLE_ROLLEN: TrainerRol[] = ['Hoofdtrainer', 'Trainer', 'Assistent-trainer']
+
+/** Een uitnodiging; het document-id is het e-mailadres in kleine letters. */
+export interface Uitnodiging {
+  email: string
+  naam: string
+  rol: TrainerRol
+  kleur: string
+  specialiteit: string
+  uitgenodigdOp: string
+}
+
+/** Vaste kleuren voor trainer-avatars (uitzondering op "geen losse hex"). */
+export const TRAINER_KLEUREN = [
+  { naam: 'Rood', waarde: '#e64439' },
+  { naam: 'Oranje', waarde: '#e95e29' },
+  { naam: 'Oker', waarde: '#c99a00' },
+  { naam: 'Groen', waarde: '#6f9a0c' },
+  { naam: 'Blauw', waarde: '#2f8fc0' },
+  { naam: 'Paars', waarde: '#8966a5' },
+  { naam: 'Zeegroen', waarde: '#1f9e89' },
+  { naam: 'Roze', waarde: '#d6458f' },
+] as const
 
 export interface Sessie {
   id: string
@@ -140,19 +161,6 @@ export interface Jaarplan {
 
 export const LOCATIE = 'Zwembad De Kwakel, Utrecht'
 
-export const TRAINERS: Trainer[] = [
-  { id: 't-sanne', naam: 'Sanne de Wit', initialen: 'SW', kleur: '#e64439', rol: 'Hoofdtrainer', specialiteit: 'Jaarplanning & wedstrijdvoorbereiding' },
-  { id: 't-joris', naam: 'Joris Bakker', initialen: 'JB', kleur: '#e95e29', rol: 'Trainer', specialiteit: 'Vlinderslag & starts' },
-  { id: 't-mo', naam: 'Mo El Amrani', initialen: 'MA', kleur: '#c99a00', rol: 'Trainer', specialiteit: 'Uithouding & open water' },
-  { id: 't-lieke', naam: 'Lieke Jansen', initialen: 'LJ', kleur: '#6f9a0c', rol: 'Trainer', specialiteit: 'Schoolslagtechniek' },
-  { id: 't-daan', naam: 'Daan Visser', initialen: 'DV', kleur: '#2f8fc0', rol: 'Trainer', specialiteit: 'Sprint & keerpunten' },
-  { id: 't-femke', naam: 'Femke Mulder', initialen: 'FM', kleur: '#8966a5', rol: 'Trainer', specialiteit: 'Rugslag & lijnhouding' },
-  { id: 't-ravi', naam: 'Ravi Kortekaas', initialen: 'RK', kleur: '#1f9e89', rol: 'Assistent-trainer', specialiteit: 'Beginnende masters' },
-  { id: 't-noor', naam: 'Noor Hendriks', initialen: 'NH', kleur: '#d6458f', rol: 'Assistent-trainer', specialiteit: 'Wisselslag & drills' },
-]
-
-/** De trainer die in deze demo "ingelogd" is. */
-export const STANDAARD_TRAINER_ID = 't-sanne'
 
 export const SESSIES: Sessie[] = [
   { id: 's-di', dag: 'Dinsdag', dagIndex: 1, start: '21:00', eind: '22:00', locatie: LOCATIE },
@@ -176,200 +184,42 @@ export function slotKey(weekStart: string, sessieId: string, groepId: string) {
   return `${weekStart}|${sessieId}|${groepId}`
 }
 
-/** Rotatie waarmee het rooster voor elke week een voorstel krijgt. */
-export function rotatieTrainer(weekStart: string, sessieId: string, groepId: string): string {
+/**
+ * Rotatie waarmee het rooster voor elke week een voorstel krijgt.
+ * `trainerIds` is de (gesorteerde) lijst trainers; leeg = geen voorstel.
+ */
+export function rotatieTrainer(
+  weekStart: string,
+  sessieId: string,
+  groepId: string,
+  trainerIds: readonly string[],
+): string | null {
+  if (trainerIds.length === 0) return null
   const weekIdx = Math.round(
     (new Date(weekStart).valueOf() - new Date(SEIZOEN_START_WEEK).valueOf()) / (7 * 86400000),
   )
   const s = SESSIES.findIndex((x) => x.id === sessieId)
   const g = GROEPEN.findIndex((x) => x.id === groepId)
-  const idx = (((s * GROEPEN.length + g + weekIdx * 3) % TRAINERS.length) + TRAINERS.length) % TRAINERS.length
-  return TRAINERS[idx].id
+  const n = trainerIds.length
+  const idx = (((s * GROEPEN.length + g + weekIdx * 3) % n) + n) % n
+  return trainerIds[idx]
 }
 
 export function sessieDatum(weekStart: string, sessie: Sessie): string {
   return addDays(weekStart, sessie.dagIndex)
 }
 
-function relatieveFixtures() {
-  const vandaag = todayISO()
-  const dezeWeek = startOfWeek(vandaag)
-  const volgendeWeek = addDays(dezeWeek, 7)
-
-  const afwezigheden: Afwezigheid[] = [
-    { trainerId: 't-mo', van: addDays(volgendeWeek, 0), tot: addDays(volgendeWeek, 6), reden: 'Vakantie' },
-    { trainerId: 't-femke', van: addDays(dezeWeek, 6), tot: addDays(dezeWeek, 6), reden: 'Eigen wedstrijd' },
-  ]
-
-  // Handmatige wijzigingen bovenop de rotatie. `null` = nog open.
-  const roosterWijzigingen: Record<string, string | null> = {
-    [slotKey(volgendeWeek, 's-zo', 'g-wedstrijd')]: null,
-    [slotKey(addDays(volgendeWeek, 7), 's-di', 'g-basis')]: null,
-  }
-
-  return { vandaag, dezeWeek, afwezigheden, roosterWijzigingen }
-}
-
-// ---------------------------------------------------------------------------
-// Trainingen — logboek van de afgelopen weken
-// ---------------------------------------------------------------------------
-
-type TrainingSjabloon = Omit<Training, 'id' | 'datum' | 'sessieId' | 'groepId' | 'trainerId'>
-
-const SJABLONEN: Record<string, TrainingSjabloon[]> = {
-  'g-basis': [
-    {
-      titel: 'Lange armen in de borstcrawl',
-      focus: ['Techniek', 'Uithouding'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '300 vrij, 100 rug, 100 school', meters: 500 },
-        { onderdeel: 'Techniek', omschrijving: '6×50 catch-up crawl, 20s rust', meters: 300 },
-        { onderdeel: 'Kern', omschrijving: '4×100 vrij op 2:15, tellen per baan', meters: 400 },
-        { onderdeel: 'Benen', omschrijving: '4×50 benen met plank', meters: 200 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '200 rustig naar keuze', meters: 200 },
-      ],
-      notities: 'Veel zwemmers verliezen de glijfase bij vermoeidheid — volgende keer weer catch-up erin.',
-    },
-    {
-      titel: 'Schoolslag: timing armen en benen',
-      focus: ['Schoolslag', 'Techniek'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '400 wissel vrij/school per 50', meters: 400 },
-        { onderdeel: 'Techniek', omschrijving: '8×25 school 2× benen 1× armen', meters: 200 },
-        { onderdeel: 'Kern', omschrijving: '6×75 school opbouwend, 30s rust', meters: 450 },
-        { onderdeel: 'Benen', omschrijving: '4×50 schoolslagbenen op de rug', meters: 200 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '150 rustig', meters: 150 },
-      ],
-      notities: 'Goede sfeer, 14 zwemmers. Twee nieuwe leden van de proeftraining zwommen mee.',
-    },
-    {
-      titel: 'Rugslag en ademhaling',
-      focus: ['Rugslag', 'Herstel'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '300 vrij, 200 rug', meters: 500 },
-        { onderdeel: 'Techniek', omschrijving: '6×50 rug één arm / glas water op voorhoofd', meters: 300 },
-        { onderdeel: 'Kern', omschrijving: '3×200 vrij ademhaling 3-5-3 per 50', meters: 600 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '100 rustig', meters: 100 },
-      ],
-      notities: '',
-    },
-  ],
-  'g-gevorderd': [
-    {
-      titel: 'Piramide vrij met pullbuoy',
-      focus: ['Uithouding'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '400 vrij, 200 wissel', meters: 600 },
-        { onderdeel: 'Kern', omschrijving: '100-200-300-200-100 vrij, 15s rust', meters: 900 },
-        { onderdeel: 'Armen', omschrijving: '4×100 pull, ademhaling om de 3', meters: 400 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '200 rustig', meters: 200 },
-      ],
-      notities: 'Piramide liep goed, tempo op de 300 iets te hoog ingezet door baan 4.',
-    },
-    {
-      titel: 'Keerpunten & onderwaterfase',
-      focus: ['Keerpunten', 'Techniek'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '500 vrij/rug afwisselend', meters: 500 },
-        { onderdeel: 'Techniek', omschrijving: '10×25 salto-keerpunt vanaf 5m, 3 dolfijnkicks', meters: 250 },
-        { onderdeel: 'Kern', omschrijving: '8×75 vrij, keerpunten op snelheid', meters: 600 },
-        { onderdeel: 'Benen', omschrijving: '6×50 dolfijnbenen op de rug', meters: 300 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '150 rustig', meters: 150 },
-      ],
-      notities: 'Aandachtspunt: niet ademen in de eerste slag na het keerpunt.',
-    },
-    {
-      titel: 'Wisselslag-blokken',
-      focus: ['Wisselslag', 'Uithouding'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '400 vrij, 4×50 wissel', meters: 600 },
-        { onderdeel: 'Kern', omschrijving: '6×100 wissel op 2:00', meters: 600 },
-        { onderdeel: 'Kern', omschrijving: '4×50 favoriete slag snel', meters: 200 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '200 rustig', meters: 200 },
-      ],
-      notities: '',
-    },
-  ],
-  'g-wedstrijd': [
-    {
-      titel: 'Lactaat-sets 50m',
-      focus: ['Snelheid', 'Starts'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '600 wissel, 4×25 versnellen', meters: 700 },
-        { onderdeel: 'Techniek', omschrijving: '6× start vanaf blok + 15m', meters: 90 },
-        { onderdeel: 'Kern', omschrijving: '2× (4×50 hoofdslag max op 1:30), 200 los tussen', meters: 600 },
-        { onderdeel: 'Benen', omschrijving: '6×25 benen sprint', meters: 150 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '300 rustig', meters: 300 },
-      ],
-      notities: 'Tijden genoteerd in de groepsapp. Zuyderzee-zwemmers zitten op schema.',
-    },
-    {
-      titel: 'Vlinderslag ritme en drempel',
-      focus: ['Vlinderslag', 'Uithouding'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '500 vrij, 200 rug', meters: 700 },
-        { onderdeel: 'Techniek', omschrijving: '8×25 vlinder 2 kicks 1 armslag', meters: 200 },
-        { onderdeel: 'Kern', omschrijving: '10×100 vrij op drempeltempo, 1:40', meters: 1000 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '200 rustig', meters: 200 },
-      ],
-      notities: 'Drempeltempo voor de meesten rond 1:28–1:35/100.',
-    },
-    {
-      titel: 'Race pace 100m',
-      focus: ['Snelheid', 'Keerpunten'],
-      blokken: [
-        { onderdeel: 'Inzwemmen', omschrijving: '800 opbouwend', meters: 800 },
-        { onderdeel: 'Kern', omschrijving: '3× (75 race pace + 25 los), 3 ronden', meters: 900 },
-        { onderdeel: 'Armen', omschrijving: '300 pull rustig', meters: 300 },
-        { onderdeel: 'Uitzwemmen', omschrijving: '200 rustig', meters: 200 },
-      ],
-      notities: '',
-    },
-  ],
-}
-
-function genereerTrainingen(dezeWeek: string, vandaag: string, wijzigingen: Record<string, string | null>): Training[] {
-  const lijst: Training[] = []
-  let teller = 0
-  for (const weekOffset of [-14, -7, 0]) {
-    const week = addDays(dezeWeek, weekOffset)
-    for (const sessie of SESSIES) {
-      const datum = sessieDatum(week, sessie)
-      if (datum >= vandaag) continue
-      GROEPEN.forEach((groep, gi) => {
-        teller++
-        // Een paar trainingen zijn nog niet ingevuld.
-        if (teller % 7 === 0) return
-        const key = slotKey(week, sessie.id, groep.id)
-        const trainerId = (key in wijzigingen ? wijzigingen[key] : null) ?? rotatieTrainer(week, sessie.id, groep.id)
-        const sjablonen = SJABLONEN[groep.id]
-        const sjabloon = sjablonen[(teller + gi) % sjablonen.length]
-        lijst.push({
-          id: `tr-${teller}`,
-          datum,
-          sessieId: sessie.id,
-          groepId: groep.id,
-          trainerId,
-          ...sjabloon,
-          bijlage: teller % 5 === 0 ? `training-${datum}-${groep.naam.toLowerCase()}.pdf` : undefined,
-        })
-      })
-    }
-  }
-  return lijst.sort((a, b) => (a.datum < b.datum ? 1 : -1))
-}
-
 // ---------------------------------------------------------------------------
 // Jaarplan seizoen 2026–2027
 // ---------------------------------------------------------------------------
 
-export const JAARPLAN: Jaarplan = {
+/** Standaard-jaarplan; wordt bij de eerste inrichting in Firestore gezet. */
+export const STANDAARD_JAARPLAN: Jaarplan = {
   seizoen: '2026–2027',
   van: '2026-08-31',
   tot: '2027-08-29',
   status: 'gepubliceerd',
   gepubliceerdOp: '2026-09-02',
-  gepubliceerdDoor: 't-sanne',
   versie: 3,
   periodes: [
     {
@@ -473,18 +323,17 @@ export const JAARPLAN: Jaarplan = {
 }
 
 // ---------------------------------------------------------------------------
-// Startdata voor de store
+// Toestand van de app (gevuld vanuit Firestore)
 // ---------------------------------------------------------------------------
 
-export function maakStartdata() {
-  const { vandaag, dezeWeek, afwezigheden, roosterWijzigingen } = relatieveFixtures()
-  return {
-    huidigeTrainerId: STANDAARD_TRAINER_ID,
-    afwezigheden,
-    roosterWijzigingen,
-    trainingen: genereerTrainingen(dezeWeek, vandaag, roosterWijzigingen),
-    jaarplan: JAARPLAN,
-  }
+export interface AppData {
+  /** Firebase-uid van de ingelogde trainer. */
+  huidigeTrainerId: string
+  trainers: Trainer[]
+  uitnodigingen: Uitnodiging[]
+  afwezigheden: Afwezigheid[]
+  /** Handmatige wijzigingen bovenop de rotatie. `null` = open plek. */
+  roosterWijzigingen: Record<string, string | null>
+  trainingen: Training[]
+  jaarplan: Jaarplan
 }
-
-export type AppData = ReturnType<typeof maakStartdata>

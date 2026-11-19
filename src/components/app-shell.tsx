@@ -1,20 +1,22 @@
+// Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
-import { CalendarRange, ClipboardList, LayoutDashboard, Menu, Waves } from 'lucide-react'
+import { CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
+import { toast } from 'sonner'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { TRAINERS } from '@/data/fixtures'
-import { setHuidigeTrainer, trainerById, useAppData } from '@/data/store'
+import { logUit } from '@/data/auth'
+import { trainerById, useAppData } from '@/data/store'
 import { TrainerAvatar } from './trainer-avatar'
 
 const NAV = [
@@ -22,6 +24,7 @@ const NAV = [
   { to: '/rooster', label: 'Rooster', icon: Waves },
   { to: '/jaarplan', label: 'Jaarplan', icon: CalendarRange },
   { to: '/trainingen', label: 'Trainingen', icon: ClipboardList },
+  { to: '/team', label: 'Team', icon: Users },
 ] as const
 
 export function Logo({ className = '' }: { className?: string }) {
@@ -36,13 +39,26 @@ export function Logo({ className = '' }: { className?: string }) {
   )
 }
 
-function TrainerSwitcher() {
+async function uitloggen() {
+  try {
+    await logUit()
+  } catch {
+    toast.error('Uitloggen lukte niet')
+  }
+}
+
+function useIk() {
   const data = useAppData()
-  const ik = trainerById(data.huidigeTrainerId)!
+  return trainerById(data.huidigeTrainerId)
+}
+
+function AccountMenu() {
+  const ik = useIk()
+  if (!ik) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 gap-2 px-2" aria-label={`Ingelogd als ${ik.naam}, wissel van trainer`}>
+        <Button variant="ghost" className="h-10 gap-2 px-2" aria-label={`Accountmenu van ${ik.naam}`}>
           <TrainerAvatar trainer={ik} size="sm" />
           <span className="hidden text-left text-sm leading-tight lg:block">
             <span className="block font-semibold">{ik.naam.split(' ')[0]}</span>
@@ -51,18 +67,45 @@ function TrainerSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Bekijk de app als…</DropdownMenuLabel>
+        <DropdownMenuLabel className="flex items-center gap-3 font-normal">
+          <TrainerAvatar trainer={ik} size="md" />
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate font-semibold">{ik.naam}</span>
+            <span className="block text-xs text-muted-foreground">{ik.rol}</span>
+            {ik.email && <span className="block truncate text-xs text-muted-foreground">{ik.email}</span>}
+          </span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={ik.id} onValueChange={setHuidigeTrainer}>
-          {TRAINERS.map((t) => (
-            <DropdownMenuRadioItem key={t.id} value={t.id} className="gap-2">
-              <TrainerAvatar trainer={t} size="xs" />
-              {t.naam}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        <DropdownMenuItem asChild>
+          <Link to="/team">
+            <Users aria-hidden /> Team
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => uitloggen()}>
+          <LogOut aria-hidden /> Uitloggen
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function MobielAccount() {
+  const ik = useIk()
+  if (!ik) return null
+  return (
+    <div className="mt-auto space-y-3 px-4 pb-6">
+      <Separator />
+      <div className="flex items-center gap-3">
+        <TrainerAvatar trainer={ik} size="md" />
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate font-semibold">{ik.naam}</span>
+          {ik.email && <span className="block truncate text-xs text-muted-foreground">{ik.email}</span>}
+        </span>
+      </div>
+      <Button variant="outline" className="h-11 w-full" onClick={() => uitloggen()}>
+        <LogOut aria-hidden /> Uitloggen
+      </Button>
+    </div>
   )
 }
 
@@ -86,14 +129,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-1">
-            <TrainerSwitcher />
+            <AccountMenu />
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden" aria-label="Menu openen">
                   <Menu />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-72">
+              <SheetContent side="right" className="flex w-72 flex-col">
                 <SheetHeader>
                   <SheetTitle>Menu</SheetTitle>
                   <SheetDescription>Ga naar een onderdeel van de trainersapp.</SheetDescription>
@@ -112,6 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </SheetClose>
                   ))}
                 </nav>
+                <MobielAccount />
               </SheetContent>
             </Sheet>
           </div>

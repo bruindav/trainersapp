@@ -1,0 +1,13 @@
+# Fix: fix-1
+node_modules/
+dist/
+.tanstack/
+src/routeTree.gen.ts
+.env*.local
+*.log
+.firebase/
+firebase-debug*.log
+firestore-debug.log
+# Service-account-sleutels horen nooit in de repo
+*service-account*.json
+*-firebase-adminsdk-*.json
