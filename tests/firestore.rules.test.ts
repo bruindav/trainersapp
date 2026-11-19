@@ -477,3 +477,38 @@ describe('na publicatie: vrijgeven, overnemen, ruilen', () => {
     await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p', 'wijzigingslog', 'l2'), { ...regel, door: C.uid }))
   })
 })
+
+// Fix: fix-16 — feedback
+describe('feedback', () => {
+  beforeEach(standaardTeam)
+  const fb = (extra: Record<string, unknown> = {}) => ({
+    tekst: 'De ruilknop is lastig te vinden',
+    pagina: '/rooster',
+    breedte: 390,
+    screenshot: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==',
+    door: TRAINER.uid,
+    naam: 'Trainer',
+    op: serverTimestamp(),
+    status: 'nieuw',
+    ...extra,
+  })
+  it('iedere trainer kan feedback sturen, als zichzelf en netjes', async () => {
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'feedback', 'f1'), fb()))
+    await assertFails(setDoc(doc(als(TRAINER), 'feedback', 'f2'), fb({ door: HOOFD.uid })))
+    await assertFails(setDoc(doc(als(TRAINER), 'feedback', 'f3'), fb({ tekst: '' })))
+    await assertFails(setDoc(doc(als(TRAINER), 'feedback', 'f4'), fb({ screenshot: 'https://ergens.nl/x.png' })))
+    await assertFails(setDoc(doc(als(TRAINER), 'feedback', 'f5'), fb({ pagina: 'javascript:alert(1)' })))
+    await assertFails(setDoc(doc(als(TRAINER), 'feedback', 'f6'), fb({ status: 'afgehandeld' })))
+    await assertFails(setDoc(doc(als({ uid: 'vreemd', email: 'x@y.nl' }), 'feedback', 'f7'), fb({ door: 'vreemd' })))
+  })
+  it('alleen de coördinator leest, handelt af en verwijdert', async () => {
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'feedback', 'f1'), fb()))
+    await assertFails(getDoc(doc(als(TRAINER), 'feedback', 'f1')))
+    await assertFails(updateDoc(doc(als(TRAINER), 'feedback', 'f1'), { status: 'afgehandeld' }))
+    await assertSucceeds(getDoc(doc(als(HOOFD), 'feedback', 'f1')))
+    await assertFails(updateDoc(doc(als(HOOFD), 'feedback', 'f1'), { tekst: 'anders' }))
+    await assertSucceeds(updateDoc(doc(als(HOOFD), 'feedback', 'f1'), { status: 'afgehandeld' }))
+    await assertFails(deleteDoc(doc(als(TRAINER), 'feedback', 'f1')))
+    await assertSucceeds(deleteDoc(doc(als(HOOFD), 'feedback', 'f1')))
+  })
+})

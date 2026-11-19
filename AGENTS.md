@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-16 — feedback -->
 <!-- Fix: fix-15 — ritme voor vaste trainers -->
 <!-- Fix: fix-12 — vaste trainers en geldigheidsperiode per moment -->
 <!-- Fix: fix-11 — Mijn rooster, ruilen, wijzigingslog -->
@@ -53,6 +54,7 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
 │   │   ├── rooster-onderdelen.tsx # Status badge/steps, who-can-when grid, reminder banner
 │   │   ├── rooster-acties.tsx     # Red open-slot bar (all pages), "Ik kan niet" dialog (release / ask a colleague)
+│   │   ├── feedback-knop.tsx # Floating feedback button on every screen: screenshot (modern-screenshot) + text
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
 │   ├── data
@@ -78,6 +80,7 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── periodes.$periodeId.tsx # One period: status flow, settings (incl. holidays), call-to-action, who-can-when grid
 │   │   ├── periodes.$periodeId_.beschikbaarheid.tsx # Focused 3-step availability form (?trainer= for the coordinator)
 │   │   ├── periodes.$periodeId_.indelen.tsx # Scheduling (coordinator): proposal, warnings, per-training dialog, publish; read-only roster for all once published
+│   │   ├── feedback.tsx      # Coordinator: read feedback with screenshots, mark handled, delete
 │   │   └── team.tsx          # Team: roles + tasks, invites, supervisors group, test trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
 ```
@@ -100,6 +103,7 @@ This document describes the project for developers and AI agents working on this
 | `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
 | `afwezigheden/{id}` | trainerId, van, tot, reden | own or coordinator |
 | `trainingen/{id}` | training + aangemaaktDoor | any trainer (as self); delete own or coordinator |
+| `feedback/{id}` | tekst, pagina (path), breedte, screenshot (JPEG data-URL ≤ 900 KB, visible part of the screen), door, naam, op, status nieuw/afgehandeld | create: any trainer as self; read/status/delete: coordinator only |
 | `jaarplan/huidig` | the whole Jaarplan object | coordinator or jaarplanBeheer |
 
 ## Key Concepts

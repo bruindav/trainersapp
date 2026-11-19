@@ -1,9 +1,10 @@
+// Fix: fix-16 — feedbackknop op elk scherm; menu-item Feedback voor de coördinator
 // Fix: fix-11 — open-plek-balk onder de kop
 // Fix: fix-5 — navigatie-item Periodes
 // Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
-import { CalendarCheck, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
+import { CalendarCheck, CalendarRange, ClipboardList, Inbox, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ReactNode } from 'react'
 
@@ -21,6 +22,7 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTi
 import { logUit } from '@/data/auth'
 import { trainerById, useAppData } from '@/data/store'
 import { rolLabel } from '@/data/fixtures'
+import { FeedbackKnop } from './feedback-knop'
 import { OpenPlekBalk } from './rooster-acties'
 import { TrainerAvatar } from './trainer-avatar'
 
@@ -87,6 +89,13 @@ function AccountMenu() {
             <Users aria-hidden /> Team
           </Link>
         </DropdownMenuItem>
+        {ik.coordinator && (
+          <DropdownMenuItem asChild>
+            <Link to="/feedback">
+              <Inbox aria-hidden /> Feedback lezen
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => uitloggen()}>
           <LogOut aria-hidden /> Uitloggen
         </DropdownMenuItem>
@@ -108,6 +117,15 @@ function MobielAccount() {
           {ik.email && <span className="block truncate text-xs text-muted-foreground">{ik.email}</span>}
         </span>
       </div>
+      {ik.coordinator && (
+        <SheetClose asChild>
+          <Button asChild variant="ghost" className="h-11 w-full justify-start">
+            <Link to="/feedback">
+              <Inbox aria-hidden /> Feedback lezen
+            </Link>
+          </Button>
+        </SheetClose>
+      )}
       <Button variant="outline" className="h-11 w-full" onClick={() => uitloggen()}>
         <LogOut aria-hidden /> Uitloggen
       </Button>
@@ -171,6 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <OpenPlekBalk />
 
       <main className="flex-1">{children}</main>
+      <FeedbackKnop />
 
       <footer className="mt-16 bg-nat-ink text-white/80">
         <div className="nat-rainbow h-1" aria-hidden />

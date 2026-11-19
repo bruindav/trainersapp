@@ -1,3 +1,4 @@
+// Fix: fix-16 — feedback: iedereen stuurt, alleen de coördinator leest.
 // Fix: fix-15 — trainingsmomenten: ritmeWeken (1–8).
 // Fix: fix-12 — trainingsmomenten: vaste trainers en geldigheidsperiode.
 // Fix: fix-11 — trainers: vrijgeven, overnemen, ruilen na publicatie; ruilverzoeken; wijzigingslog.
@@ -454,6 +455,29 @@ service cloud.firestore {
         || isCoordinator()
       );
       allow update: if false;
+    }
+
+    // --- Feedback (fix-16) ----------------------------------------------------
+    // Iedere trainer kan feedback sturen (als zichzelf); alleen de
+    // coördinator kan het lezen, afhandelen en verwijderen.
+    match /feedback/{id} {
+      allow create: if isTrainer()
+        && request.resource.data.keys().hasOnly(['tekst', 'pagina', 'breedte', 'screenshot', 'door', 'naam', 'op', 'status'])
+        && request.resource.data.door == request.auth.uid
+        && tekst(request.resource.data.tekst, 2000) && request.resource.data.tekst.size() > 0
+        && tekst(request.resource.data.pagina, 300) && request.resource.data.pagina.matches('^/.*')
+        && request.resource.data.breedte is int
+        && tekst(request.resource.data.naam, 80)
+        && (!('screenshot' in request.resource.data)
+            || (request.resource.data.screenshot is string
+                && request.resource.data.screenshot.size() <= 900000
+                && request.resource.data.screenshot.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')))
+        && request.resource.data.op == request.time
+        && request.resource.data.status == 'nieuw';
+      allow read, delete: if isCoordinator();
+      allow update: if isCoordinator()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['nieuw', 'afgehandeld'];
     }
 
     // --- Jaarplan -----------------------------------------------------------

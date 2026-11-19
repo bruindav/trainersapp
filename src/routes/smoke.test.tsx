@@ -1,3 +1,4 @@
+// Fix: fix-16 — feedbackpagina
 // Fix: fix-11 — Mijn rooster, open-plek-balk en verzoeken
 // Fix: fix-10 — pagina indelen
 // Fix: fix-7 — pagina beschikbaarheid
@@ -67,6 +68,11 @@ const DATA: AppData = {
   jaarplan: STANDAARD_JAARPLAN,
 }
 
+vi.mock('@/data/feedback', async (orig) => ({
+  ...(await orig<typeof import('@/data/feedback')>()),
+  useFeedback: () => ({ lijst: [], fout: false }),
+}))
+
 vi.mock('@/data/auth', () => ({
   startAuth: () => {},
   logUit: async () => {},
@@ -91,6 +97,7 @@ vi.mock('@/data/store', async (orig) => {
 const PAGINAS: [string, RegExp][] = [
   ['/', /Anna/],
   ['/rooster', /^Mijn rooster$/],
+  ['/feedback', /^Feedback$/],
   ['/jaarplan', /Jaarplan|Seizoen/],
   ['/trainingen', /getraind/],
   ['/team', /^Team$/],
