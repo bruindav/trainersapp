@@ -1,3 +1,4 @@
+// Fix: fix-17 — naam van een teamlid wijzigen
 // Fix: fix-4 — rol direct in het menu (submenu viel op mobiel buiten beeld)
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht), groep toezichthouders
 // Fix: fix-2 — testtrainers toevoegen en verwijderen
@@ -278,6 +279,7 @@ function TeamPagina() {
 
 function TeamlidActies({ trainer, ik, onVerwijder }: { trainer: Trainer; ik: Trainer; onVerwijder: () => void }) {
   const isIk = trainer.id === ik.id
+  const [naamWijzigen, setNaamWijzigen] = useState(false)
 
   async function wijzig(w: Partial<Taken> & { rol?: TrainerRol }, melding: string) {
     try {
@@ -334,16 +336,64 @@ function TeamlidActies({ trainer, ik, onVerwijder }: { trainer: Trainer; ik: Tra
             {TAAK_LABELS[taak]}
           </DropdownMenuCheckboxItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setNaamWijzigen(true)}>Naam wijzigen</DropdownMenuItem>
         {!isIk && (
           <>
-            <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onVerwijder}>
               Verwijderen uit team
             </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
+      {naamWijzigen && <NaamDialog trainer={trainer} onClose={() => setNaamWijzigen(false)} />}
     </DropdownMenu>
+  )
+}
+
+function NaamDialog({ trainer, onClose }: { trainer: Trainer; onClose: () => void }) {
+  const [naam, setNaam] = useState(trainer.naam)
+  const [bezig, setBezig] = useState(false)
+  const nieuw = naam.trim().replace(/\s+/g, ' ')
+
+  async function opslaan(e: FormEvent) {
+    e.preventDefault()
+    if (!nieuw || nieuw === trainer.naam) return onClose()
+    setBezig(true)
+    try {
+      await wijzigTrainer(trainer.id, { naam: nieuw, initialen: initialenVan(nieuw) })
+      toast.success(`Naam gewijzigd in ${nieuw}`)
+      onClose()
+    } catch {
+      toast.error('Wijzigen lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <form onSubmit={opslaan} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Naam wijzigen</DialogTitle>
+            <DialogDescription>Rooster, beschikbaarheid en trainingen blijven bij deze persoon horen.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="nieuwe-naam">Voor- en achternaam</Label>
+            <Input id="nieuwe-naam" value={naam} onChange={(e) => setNaam(e.target.value)} maxLength={80} autoFocus />
+          </div>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Annuleren
+            </Button>
+            <Button type="submit" disabled={bezig || !nieuw}>
+              Opslaan
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -441,9 +491,17 @@ function ToezichthoudersKaart({ magBeheren }: { magBeheren: boolean }) {
   )
 }
 
+/** Oude namen van testtrainers → nieuwe namen (wens van 19 nov 2026). */
+const NIEUWE_TESTNAMEN: Record<string, string> = {
+  'Elke Rovers': 'Rita Jager',
+  'Daphne Z': 'Daphne Kuilman',
+  'David Y': 'David Micó Martinez',
+}
+
 function TesttrainersKaart() {
   const data = useAppData()
   const aantal = data.trainers.filter((t) => t.test).length
+  const oud = data.trainers.filter((t) => t.test && NIEUWE_TESTNAMEN[t.naam])
   const [bezig, setBezig] = useState(false)
 
   async function uitvoeren(actie: () => Promise<void>, gelukt: string) {
@@ -483,6 +541,21 @@ function TesttrainersKaart() {
         ) : (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">{aantal} testtrainers in het team</span>
+            {oud.length > 0 && (
+              <Button
+                disabled={bezig}
+                onClick={() =>
+                  uitvoeren(async () => {
+                    for (const t of oud) {
+                      const naam = NIEUWE_TESTNAMEN[t.naam]
+                      await wijzigTrainer(t.id, { naam, initialen: initialenVan(naam) })
+                    }
+                  }, `${oud.length} namen bijgewerkt`)
+                }
+              >
+                Namen bijwerken ({oud.map((t) => NIEUWE_TESTNAMEN[t.naam].split(' ')[0]).join(', ')})
+              </Button>
+            )}
             <Button
               variant="outline"
               disabled={bezig}

@@ -1,3 +1,4 @@
+// Fix: fix-17 — namen van testtrainers bijgewerkt
 // Fix: fix-11 — ruilverzoeken en wijzigingslog in AppData
 // Fix: fix-5 — roosterperiodes en beschikbaarheid in AppData
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht)
@@ -68,14 +69,14 @@ export interface Toezichthouder {
 /** Testtrainers die de hoofdtrainer met één knop kan toevoegen en verwijderen. */
 export const TESTTRAINERS = [
   'Aalder Mellema',
-  'Elke Rovers',
+  'Rita Jager',
   'Pim Kool',
   'Marlien Wijnhof',
   'Gert Mooi',
   'Viola X',
-  'David Y',
+  'David Micó Martinez',
   'Jeroen Eskens',
-  'Daphne Z',
+  'Daphne Kuilman',
 ] as const
 
 export const ALLE_ROLLEN: TrainerRol[] = ['Trainer', 'Assistent-trainer', 'Geen training']

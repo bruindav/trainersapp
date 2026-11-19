@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-17 — naam van een teamlid wijzigen.
  * Fix: fix-15 — ritme van vaste trainers opslaan.
  * Fix: fix-12 — vaste trainers en geldigheid van trainingsmomenten.
  * Fix: fix-11 — vrijgeven, overnemen, ruilverzoeken, wijzigingslog; publiceren met volledige indeling.
@@ -614,7 +615,10 @@ export async function trekUitnodigingIn(email: string) {
 }
 
 /** Wijzigt rol en/of taken van een teamlid. */
-export async function wijzigTrainer(trainerId: string, wijziging: Partial<Taken> & { rol?: TrainerRol }) {
+export async function wijzigTrainer(
+  trainerId: string,
+  wijziging: Partial<Taken> & { rol?: TrainerRol; naam?: string; initialen?: string },
+) {
   await updateDoc(doc(getDb(), 'trainers', trainerId), wijziging)
 }
 
@@ -648,8 +652,8 @@ export async function voegTesttrainersToe() {
   const db = getDb()
   const batch = writeBatch(db)
   // Een paar varianten, zodat rollen en toezicht te testen zijn.
-  const assistent = new Set(['Gert Mooi', 'Daphne Z'])
-  const toezicht = new Set(['Aalder Mellema', 'Pim Kool', 'Marlien Wijnhof', 'David Y', 'Jeroen Eskens'])
+  const assistent = new Set(['Gert Mooi', 'Daphne Kuilman'])
+  const toezicht = new Set(['Aalder Mellema', 'Pim Kool', 'Marlien Wijnhof', 'David Micó Martinez', 'Jeroen Eskens'])
   TESTTRAINERS.forEach((naam, i) => {
     batch.set(doc(db, 'trainers', testTrainerId(naam)), {
       naam,
