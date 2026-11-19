@@ -1,4 +1,4 @@
-// Fix: fix-15 — ritme voor vaste trainers instellen
+// Fix: fix-15 — op mobiel de knoppen onder het moment; ritme voor vaste trainers instellen
 // Fix: fix-13 — waarschuwing bij verkeerd jaar bij een nieuwe periode
 // Fix: fix-12 — per moment vaste trainers en een geldigheidsperiode instellen
 // Fix: fix-9 — trainingsmomenten inklapbaar
@@ -203,8 +203,8 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
         ) : (
           <ul className="divide-y">
             {data.trainingsmomenten.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
+              <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+                <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                   <p className="font-semibold">
                     {momentNaam(m)}
                     {!m.actief && <span className="ml-2 text-sm font-normal text-muted-foreground">(niet actief)</span>}
