@@ -1,3 +1,4 @@
+// Fix: fix-23 — help: blokken inklappen
 // Fix: fix-21 — help over trainingsopbouw en wedstrijden
 // Fix: fix-20 — helppagina
 import { createFileRoute } from '@tanstack/react-router'
@@ -126,8 +127,8 @@ function HelpPagina() {
         <p>
           Onder <strong>Jaarplan</strong> staat de <strong>trainingsopbouw</strong>: per opbouw (bijv. sept–dec naar een
           wedstrijd) een inleiding, aandachtsgebieden en gekleurde fases op een tijdlijn. Tik op een fase voor het doel, de
-          trainingszones, techniek en voorbeeldsets. Bovenaan zie je welke fase nu loopt. Het eerdere
-          <strong> seizoensoverzicht</strong> staat er ook nog, via de knop bovenaan.
+          trainingszones, techniek en voorbeeldsets. Bovenaan zie je welke fase nu loopt. Blokken klap je in of uit door op
+          de titel te tikken; de app onthoudt dat.
         </p>
         <ul>
           <li>
