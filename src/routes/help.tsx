@@ -1,3 +1,4 @@
+// Fix: fix-21 — help over trainingsopbouw en wedstrijden
 // Fix: fix-20 — helppagina
 import { createFileRoute } from '@tanstack/react-router'
 
@@ -15,6 +16,7 @@ const ONDERWERPEN = [
   ['kan-niet', 'Kun je een keer niet?'],
   ['open-plek', 'Een open plek overnemen'],
   ['trainingen', 'Trainingen vastleggen'],
+  ['jaarplan', 'Jaarplan en wedstrijden'],
   ['feedback', 'Feedback geven'],
   ['coordinator', 'Voor de coördinator'],
   ['installeren', 'De app op je telefoon zetten'],
@@ -117,6 +119,26 @@ function HelpPagina() {
           Onder <strong>Trainingen</strong> leg je vast wat je hebt getraind: onderdelen, meters en aandachtspunten. Zo
           zien collega's wat er in het water is gedaan. Een eerdere training kun je als basis voor een nieuwe gebruiken.
         </p>
+      </section>
+
+      <section id="jaarplan" className="scroll-mt-24">
+        <h2>Jaarplan en wedstrijden</h2>
+        <p>
+          Onder <strong>Jaarplan</strong> staat de <strong>trainingsopbouw</strong>: per opbouw (bijv. sept–dec naar een
+          wedstrijd) een inleiding, aandachtsgebieden en gekleurde fases op een tijdlijn. Tik op een fase voor het doel, de
+          trainingszones, techniek en voorbeeldsets. Bovenaan zie je welke fase nu loopt. Het eerdere
+          <strong> seizoensoverzicht</strong> staat er ook nog, via de knop bovenaan.
+        </p>
+        <ul>
+          <li>
+            Het jaarplan wordt ingevuld door de trainer met de taak Jaarplan (of de coördinator). Elk blok heeft een potlood;
+            teksten mogen opsommingen, inspringen, vet en kleur hebben, en plakken uit Word houdt die opmaak vast.
+          </li>
+          <li>
+            <strong>Wedstrijden</strong> voeren de coördinator, de jaarplanbeheerder en de wedstrijdcoördinator in. Ze staan als
+            vlaggetje op de tijdlijn.
+          </li>
+        </ul>
       </section>
 
       <section id="feedback" className="scroll-mt-24">

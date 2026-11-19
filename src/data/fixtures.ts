@@ -1,3 +1,4 @@
+// Fix: fix-21 — taak Wedstrijdcoördinator; jaarplan met opbouwen, zones en wedstrijden
 // Fix: fix-17 — namen van testtrainers bijgewerkt
 // Fix: fix-11 — ruilverzoeken en wijzigingslog in AppData
 // Fix: fix-5 — roosterperiodes en beschikbaarheid in AppData
@@ -27,9 +28,17 @@ export interface Taken {
   teamBeheer: boolean
   /** Heeft de toezichthouder-bevoegdheid. */
   toezichthouder: boolean
+  /** Wedstrijdcoördinator: voert wedstrijden in (fix-21). */
+  wedstrijdBeheer: boolean
 }
 
-export const GEEN_TAKEN: Taken = { coordinator: false, jaarplanBeheer: false, teamBeheer: false, toezichthouder: false }
+export const GEEN_TAKEN: Taken = {
+  coordinator: false,
+  jaarplanBeheer: false,
+  teamBeheer: false,
+  toezichthouder: false,
+  wedstrijdBeheer: false,
+}
 
 export interface Trainer extends Taken {
   id: string
@@ -48,10 +57,13 @@ export const TAAK_LABELS: Record<keyof Taken, string> = {
   jaarplanBeheer: 'Jaarplan',
   teamBeheer: 'Teambeheer',
   toezichthouder: 'Toezichthouder',
+  wedstrijdBeheer: 'Wedstrijden',
 }
 
 export const magTeamBeheren = (t: Taken | undefined) => !!t && (t.coordinator || t.teamBeheer)
 export const magJaarplanBewerken = (t: Taken | undefined) => !!t && (t.coordinator || t.jaarplanBeheer)
+export const magWedstrijdenBewerken = (t: Taken | undefined) =>
+  !!t && (t.coordinator || t.jaarplanBeheer || t.wedstrijdBeheer)
 export const geeftTraining = (t: Pick<Trainer, 'rol'>) => t.rol !== 'Geen training'
 
 /** Korte omschrijving, bijv. "Trainer · Coördinator". */
@@ -203,6 +215,64 @@ export interface Evenement {
   bevestigd: boolean
 }
 
+/** Trainingszone (naslag voor het hele seizoen). */
+export interface Zone {
+  id: string
+  naam: string
+  kleur: string
+  /** Bijv. "~70%" of "75–85%". */
+  percentage: string
+  omschrijving: string
+}
+
+/** Fase binnen een opbouw (gekleurd blok op de tijdlijn). Teksten zijn opgemaakte HTML. */
+export interface Fase {
+  id: string
+  naam: string
+  van: string
+  tot: string
+  kleur: string
+  doel: string
+  zones: string[]
+  zonesToelichting: string
+  techniek: string
+  letOp: string
+  sets: string[]
+}
+
+export interface Aandachtsgebied {
+  id: string
+  titel: string
+  /** Opgemaakte HTML. */
+  tekst: string
+}
+
+/** Een opbouw naar een doelwedstrijd (bijv. sept–dec naar Frankfurt). */
+export interface Opbouw {
+  id: string
+  naam: string
+  /** Opgemaakte HTML. */
+  inleiding: string
+  doelWedstrijdId: string | null
+  aandachtsgebieden: Aandachtsgebied[]
+  fases: Fase[]
+}
+
+/** Wedstrijd (eigen collectie `wedstrijden`). */
+export interface Wedstrijd {
+  id: string
+  naam: string
+  datum: string
+  einddatum?: string
+  plaats: string
+  baan: '' | '25' | '50'
+  inschrijvenVoor?: string
+  onderVoorbehoud: boolean
+  /** Doelwedstrijd: een opbouw werkt hiernaartoe. */
+  doel: boolean
+  notitie: string
+}
+
 export interface Jaarplan {
   seizoen: string
   van: string
@@ -211,9 +281,33 @@ export interface Jaarplan {
   gepubliceerdOp?: string
   gepubliceerdDoor?: string
   versie: number
+  /** Seizoensoverzicht in blokken (de eerste werkwijze; blijft als alternatief). */
   periodes: Periode[]
+  /** Evenementen van het seizoensoverzicht; type 'Reces' = geen training. */
   evenementen: Evenement[]
+  zones: Zone[]
+  opbouwen: Opbouw[]
 }
+
+export const FASE_KLEUREN = [
+  { naam: 'Blauw', waarde: '#41a8da' },
+  { naam: 'Groen', waarde: '#8cbb15' },
+  { naam: 'Geel', waarde: '#ffce00' },
+  { naam: 'Oranje', waarde: '#e95e29' },
+  { naam: 'Rood', waarde: '#e64439' },
+  { naam: 'Paars', waarde: '#8966a5' },
+] as const
+
+/** Zones uit de trainingsopbouw van 2026. */
+export const STANDAARD_ZONES: Zone[] = [
+  { id: 'a0', naam: 'Aeroob 0', kleur: '#9fd3ec', percentage: '< 65%', omschrijving: 'Herstel. Rustige techniekopdrachten, laag tempo.' },
+  { id: 'a1', naam: 'Aeroob 1', kleur: '#41a8da', percentage: '~70%', omschrijving: 'Opbouw aerobe capaciteit (VO2max), rustig duurtempo.' },
+  { id: 'a2', naam: 'Aeroob 2', kleur: '#8cbb15', percentage: '75–85%', omschrijving: 'Opbouw aerobe capaciteit, pittig duurtempo.' },
+  { id: 'a3', naam: 'Aeroob 3', kleur: '#ffce00', percentage: '85–90%', omschrijving: 'Opbouw aeroob vermogen, intensief duurtempo.' },
+  { id: 'lp', naam: 'Lactaatproductie', kleur: '#e95e29', percentage: '90–100%', omschrijving: 'Opbouw anaerobe capaciteit en snelheid.' },
+  { id: 'lt', naam: 'Lactaattolerantie', kleur: '#e64439', percentage: '', omschrijving: 'Opbouw anaeroob vermogen, tolerantie voor verzuring, racesimulatie.' },
+  { id: 'sp', naam: 'Sprint', kleur: '#8966a5', percentage: 'max', omschrijving: 'Maximale snelheid, kracht en coördinatie.' },
+]
 
 // ---------------------------------------------------------------------------
 // Club & trainers
@@ -371,6 +465,8 @@ export const STANDAARD_JAARPLAN: Jaarplan = {
       intensiteit: 1,
     },
   ],
+  zones: STANDAARD_ZONES,
+  opbouwen: [],
   evenementen: [
     { id: 'e1', naam: 'Zuyderzee Masterscircuit — wedstrijd 1', datum: '2026-10-17', type: 'Wedstrijd', bevestigd: false },
     { id: 'e2', naam: 'Zuyderzee Masterscircuit — wedstrijd 2', datum: '2026-11-21', type: 'Wedstrijd', bevestigd: false },
@@ -404,4 +500,5 @@ export interface AppData {
   roosterWijzigingen: Record<string, string | null>
   trainingen: Training[]
   jaarplan: Jaarplan
+  wedstrijden: Wedstrijd[]
 }

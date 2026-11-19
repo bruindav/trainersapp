@@ -1,3 +1,4 @@
+// Fix: fix-21 — wedstrijden, taak wedstrijdBeheer, jaarplan met opbouwen en zones.
 // Fix: fix-16 — feedback: iedereen stuurt, alleen de coördinator leest.
 // Fix: fix-15 — trainingsmomenten: ritmeWeken (1–8).
 // Fix: fix-12 — trainingsmomenten: vaste trainers en geldigheidsperiode.
@@ -54,6 +55,12 @@ service cloud.firestore {
         && existsAfter(trainerPad(request.auth.uid))
         && coordinatorIn(getAfter(trainerPad(request.auth.uid)).data);
     }
+    // fix-21: wedstrijden invoeren (coördinator, jaarplan of wedstrijdcoördinator)
+    function magWedstrijden() {
+      return isTrainer() && (coordinatorIn(ikData())
+        || ikData().get('jaarplanBeheer', false) == true
+        || ikData().get('wedstrijdBeheer', false) == true);
+    }
     function magJaarplanNa() {
       return ingelogd()
         && existsAfter(trainerPad(request.auth.uid))
@@ -90,7 +97,8 @@ service cloud.firestore {
       return !(veld in d) || d[veld] is bool;
     }
     function takenGeldig(d) {
-      return isBoolVeld(d, 'coordinator') && isBoolVeld(d, 'jaarplanBeheer') && isBoolVeld(d, 'teamBeheer') && isBoolVeld(d, 'toezichthouder');
+      return isBoolVeld(d, 'coordinator') && isBoolVeld(d, 'jaarplanBeheer') && isBoolVeld(d, 'teamBeheer') && isBoolVeld(d, 'toezichthouder')
+        && isBoolVeld(d, 'wedstrijdBeheer');
     }
     // Geeft dit document coördinator- of teambeheer-rechten?
     function zwareTaken(d) {
@@ -98,7 +106,7 @@ service cloud.firestore {
     }
     function geldigeTrainer(d) {
       return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds', 'test',
-                               'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder'])
+                               'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder', 'wedstrijdBeheer'])
         && tekst(d.naam, 80) && d.naam.size() > 0
         && tekst(d.initialen, 3) && d.initialen.size() > 0
         && tekst(d.kleur, 9) && d.kleur.matches('^#[0-9a-fA-F]{6}$')
@@ -114,7 +122,8 @@ service cloud.firestore {
         && d.get('coordinator', false) == u.get('coordinator', false)
         && d.get('jaarplanBeheer', false) == u.get('jaarplanBeheer', false)
         && d.get('teamBeheer', false) == u.get('teamBeheer', false)
-        && d.get('toezichthouder', false) == u.get('toezichthouder', false);
+        && d.get('toezichthouder', false) == u.get('toezichthouder', false)
+        && d.get('wedstrijdBeheer', false) == u.get('wedstrijdBeheer', false);
     }
 
     // --- Inrichting ---------------------------------------------------------
@@ -187,7 +196,7 @@ service cloud.firestore {
         && (isCoordinator() || !zwareTaken(request.resource.data))
         && email == email.lower()
         && request.resource.data.keys().hasOnly(['email', 'naam', 'rol', 'kleur', 'specialiteit', 'uitgenodigdOp',
-                                                 'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder'])
+                                                 'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder', 'wedstrijdBeheer'])
         && request.resource.data.email == email
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
         && isRol(request.resource.data.rol)
@@ -488,14 +497,38 @@ service cloud.firestore {
         && id == 'huidig'
         && request.resource.data.keys().hasOnly([
              'seizoen', 'van', 'tot', 'status', 'gepubliceerdOp', 'gepubliceerdDoor',
-             'versie', 'periodes', 'evenementen'])
+             'versie', 'periodes', 'evenementen', 'zones', 'opbouwen'])
         && tekst(request.resource.data.seizoen, 40)
         && isDatum(request.resource.data.van) && isDatum(request.resource.data.tot)
         && request.resource.data.status in ['concept', 'gepubliceerd']
         && request.resource.data.versie is int && request.resource.data.versie >= 0
         && request.resource.data.periodes is list && request.resource.data.periodes.size() <= 30
-        && request.resource.data.evenementen is list && request.resource.data.evenementen.size() <= 100;
+        && request.resource.data.evenementen is list && request.resource.data.evenementen.size() <= 100
+        // fix-21: trainingsopbouw (opgemaakte teksten; het document blijft onder 1 MB)
+        && (!('zones' in request.resource.data)
+            || (request.resource.data.zones is list && request.resource.data.zones.size() <= 20))
+        && (!('opbouwen' in request.resource.data)
+            || (request.resource.data.opbouwen is list && request.resource.data.opbouwen.size() <= 12));
       allow delete: if false;
+    }
+
+    // --- Wedstrijden (fix-21) ------------------------------------------------
+    match /wedstrijden/{id} {
+      allow read: if isTrainer();
+      allow create, update: if magWedstrijden()
+        && request.resource.data.keys().hasOnly(['naam', 'datum', 'einddatum', 'plaats', 'baan', 'inschrijvenVoor',
+                                                 'onderVoorbehoud', 'doel', 'notitie'])
+        && tekst(request.resource.data.naam, 120) && request.resource.data.naam.size() > 0
+        && isDatum(request.resource.data.datum)
+        && (!('einddatum' in request.resource.data)
+            || (isDatum(request.resource.data.einddatum) && request.resource.data.einddatum >= request.resource.data.datum))
+        && tekst(request.resource.data.plaats, 120)
+        && request.resource.data.baan in ['', '25', '50']
+        && (!('inschrijvenVoor' in request.resource.data) || isDatum(request.resource.data.inschrijvenVoor))
+        && request.resource.data.onderVoorbehoud is bool
+        && request.resource.data.doel is bool
+        && tekst(request.resource.data.notitie, 1000);
+      allow delete: if magWedstrijden();
     }
 
     // Al het overige is dicht.

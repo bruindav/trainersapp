@@ -1,3 +1,4 @@
+// Fix: fix-21 — taak Wedstrijden (wedstrijdcoördinator)
 // Fix: fix-19 — uitnodigingsmail via EmailJS; inloggen met Google
 // Fix: fix-18 — uitnodiging mailen (inloglink), opnieuw mailen of zelf mailen
 // Fix: fix-17 — naam van een teamlid wijzigen
@@ -73,7 +74,7 @@ export const Route = createFileRoute('/team')({
   component: TeamPagina,
 })
 
-const TAKEN: (keyof Taken)[] = ['coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder']
+const TAKEN: (keyof Taken)[] = ['coordinator', 'jaarplanBeheer', 'wedstrijdBeheer', 'teamBeheer', 'toezichthouder']
 /** Taken die alleen de coördinator mag toekennen. */
 const ALLEEN_COORDINATOR: (keyof Taken)[] = ['coordinator', 'teamBeheer']
 
@@ -87,6 +88,7 @@ function RolEnTaken({ t }: { t: Trainer | Uitnodiging }) {
       <Badge variant={t.rol === 'Geen training' ? 'secondary' : 'outline'}>{t.rol}</Badge>
       {t.coordinator && <Badge>Coördinator</Badge>}
       {t.jaarplanBeheer && <Badge variant="outline">Jaarplan</Badge>}
+      {t.wedstrijdBeheer && <Badge variant="outline">Wedstrijden</Badge>}
       {t.teamBeheer && !t.coordinator && <Badge variant="outline">Teambeheer</Badge>}
       {t.toezichthouder && (
         <Badge variant="outline" className="gap-1">

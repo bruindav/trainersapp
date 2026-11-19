@@ -29,6 +29,7 @@ const data = (status: 'indelen' | 'gepubliceerd'): AppData => ({
   roosterWijzigingen: {},
   trainingen: [],
   jaarplan: { ...STANDAARD_JAARPLAN, evenementen: [] },
+  wedstrijden: [],
 })
 
 describe('gepubliceerdeTrainingen', () => {

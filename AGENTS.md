@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-21 — trainingsopbouw, wedstrijden, taak wedstrijdBeheer, rijke tekst -->
 <!-- Fix: fix-20 — help, privacy, disclaimer, digidave, versie, iOS -->
 <!-- Fix: fix-19 — alleen Google-inlog; uitnodigingsmail via EmailJS -->
 <!-- Fix: fix-18 — uitnodigen: mail vanuit eigen mailprogramma; inloglink optioneel -->
@@ -57,6 +58,8 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
 │   │   ├── rooster-onderdelen.tsx # Status badge/steps, who-can-when grid, reminder banner
 │   │   ├── rooster-acties.tsx     # Red open-slot bar (all pages), "Ik kan niet" dialog (release / ask a colleague)
+│   │   ├── rijke-tekst.tsx   # Tiptap editor (bold/italic/underline, lists, indent, colour; Word paste) + DOMPurify viewer
+│   │   ├── jaarplan-wissel.tsx # Switch between Trainingsopbouw and Seizoensoverzicht
 │   │   ├── info-pagina.tsx   # InfoPagina layout, InfoLinks, GemaaktDoor (digidave logo + version), OpenbareLayout
 │   │   ├── feedback-knop.tsx # Floating feedback button on every screen: screenshot (modern-screenshot) + text
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
@@ -64,6 +67,8 @@ This document describes the project for developers and AI agents working on this
 │   ├── data
 │   │   ├── fixtures.ts       # Domain types, fixed club data (sessies, groepen), default jaarplan, AppData
 │   │   ├── auth.ts           # Firebase Auth state, access check, invite redemption, first-time setup
+│   │   ├── jaarplan.ts       # normaliseerJaarplan (old docs), faseOp, opbouwBereik, tijdlijnPositie, volgendeWedstrijd
+│   │   ├── jaarplan-voorbeeld.ts # The trainingsopbouw sept–dec 2026 (from the Word document), loadable from the empty state
 │   │   ├── indeling.ts       # Scheduling logic: maakVoorstel(), controleer() warnings, tellingen(), openPlekken()
 │   │   ├── wijzigingen.ts    # Published trainings, swap requests and change-log types; kanOvernemen()
 │   │   ├── rooster.ts        # Roster domain: moments, periods, availability, trainingenInPeriode()
@@ -78,7 +83,9 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── __root.tsx        # Auth gate + AppShell around <Outlet/> (HTML shell is index.html)
 │   │   ├── index.tsx         # Overzicht / dashboard
 │   │   ├── rooster.tsx       # Mijn rooster: own trainings, "Ik kan niet", requests for me, open slots, change log (coordinator)
-│   │   ├── jaarplan.tsx      # Season timeline, periods (edit = coordinator or jaarplanBeheer), publish dialog
+│   │   ├── jaarplan.tsx      # Trainingsopbouw: timeline (fases, reces, wedstrijden), 'nu', opbouwen with inleiding/aandachtsgebieden/fases, zones; edit per block
+│   │   ├── jaarplan_.seizoensoverzicht.tsx # The first jaarplan view (block periods + evenementen), kept as alternative
+│   │   ├── wedstrijden.tsx   # Competitions list + add/edit (coordinator, jaarplanBeheer, wedstrijdBeheer)
 │   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
 │   │   ├── periodes.index.tsx      # Roster periods list, fixed training moments, new-period dialog
 │   │   ├── periodes.$periodeId.tsx # One period: status flow, settings (incl. holidays), call-to-action, who-can-when grid
@@ -109,7 +116,8 @@ This document describes the project for developers and AI agents working on this
 | `afwezigheden/{id}` | trainerId, van, tot, reden | own or coordinator |
 | `trainingen/{id}` | training + aangemaaktDoor | any trainer (as self); delete own or coordinator |
 | `feedback/{id}` | tekst, pagina (path), breedte, screenshot (JPEG data-URL ≤ 900 KB, visible part of the screen), door, naam, op, status nieuw/afgehandeld | create: any trainer as self; read/status/delete: coordinator only |
-| `jaarplan/huidig` | the whole Jaarplan object | coordinator or jaarplanBeheer |
+| `jaarplan/huidig` | seizoen, van, tot, status, versie, periodes[] + evenementen[] (seizoensoverzicht; evenementen of type Reces = no training), zones[] {id,naam,kleur,percentage,omschrijving}, opbouwen[] {id,naam,inleiding(html),doelWedstrijdId,aandachtsgebieden[{id,titel,tekst(html)}],fases[{id,naam,van,tot,kleur,doel,zones[],zonesToelichting,techniek,letOp,sets[]}]} | coordinator or jaarplanBeheer |
+| `wedstrijden/{id}` | naam, datum, einddatum?, plaats, baan ''/'25'/'50', inschrijvenVoor?, onderVoorbehoud, doel, notitie | coordinator, jaarplanBeheer or wedstrijdBeheer; all trainers read |
 
 ## Key Concepts
 
@@ -204,6 +212,7 @@ pnpm preview       # Preview the production build
 - **Login** uses Google, which proves ownership of the address (`email_verified`); invites are matched on that verified address. (Code to finish an old email link still exists in `auth.ts`.)
 - **Version** (fix-20): `src/versie.ts` exposes `VERSIE`, filled at build time by `vite.config.ts` from the last commit subject (`fix-N: …`), shown in the footer and on the info pages. So every fix commit must start with `fix-N:`.
 - **iOS** (fix-20): build target includes Safari 15; `apple-touch-icon.png` for the home screen; Google login uses a popup (redirect breaks on Safari); Google blocks login inside in-app browsers, the error tells users to open Safari.
+- **Jaarplan** (fix-21): two views. *Trainingsopbouw* follows the Word document: per opbouw (one per build-up to a target competition, e.g. Sept–Dec → Frankfurt, after the Christmas break → EuroGames) an inleiding, aandachtsgebieden and fases with zones and example sets; zones are season-wide. *Seizoensoverzicht* is the original block view, kept as an alternative (owner's wish). Every edit sets status back to `concept`; publishing bumps `versie`. Rich texts are stored as HTML and always rendered through `maakVeilig` (DOMPurify: formatting tags only, `style` reduced to `color`). Competitions live in their own collection; a later import from the club calendar is a wish.
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.
 

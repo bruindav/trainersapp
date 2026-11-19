@@ -1,3 +1,4 @@
+// Fix: fix-21 — 'Jaarplan: nu' uit de trainingsopbouw (anders het seizoensoverzicht); volgende wedstrijd uit Wedstrijden
 // Fix: fix-11 — volgende training, open plekken en week-overzicht uit het gepubliceerde rooster
 // Fix: fix-5 — melding: beschikbaarheid invullen
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
@@ -23,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { DAGEN, dagVan } from '@/data/rooster'
+import { faseOp, volgendeWedstrijd } from '@/data/jaarplan'
 import { groepById, huidigePeriode, totaalMeters, trainerById, useAppData } from '@/data/store'
 import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, daysBetween, formatLong, formatShort, isoWeekNumber, startOfWeek, todayISO } from '@/lib/dates'
@@ -50,11 +52,24 @@ function Overzicht() {
   const recent = data.trainingen.filter((t) => t.datum >= weekGeleden && t.datum <= vandaag)
   const meters = recent.reduce((sum, t) => sum + totaalMeters(t), 0)
 
-  const periode = huidigePeriode(data, vandaag)
+  // Eerst de fase uit de trainingsopbouw, anders de periode uit het seizoensoverzicht.
+  const fase = faseOp(data.jaarplan, vandaag)
+  const periode = fase
+    ? {
+        naam: `Fase ${fase.nummer}: ${fase.fase.naam}`,
+        van: fase.fase.van,
+        tot: fase.fase.tot,
+        kleur: fase.fase.kleur,
+        doel: fase.fase.doel.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+        accenten: fase.fase.zones.map((id) => data.jaarplan.zones.find((z) => z.id === id)?.naam ?? '').filter(Boolean),
+      }
+    : huidigePeriode(data, vandaag)
   const periodeVoortgang = periode
     ? Math.round((daysBetween(periode.van, vandaag) / Math.max(1, daysBetween(periode.van, periode.tot))) * 100)
     : 0
-  const volgendEvenement = data.jaarplan.evenementen.find((e) => e.datum >= vandaag)
+  const volgendEvenement =
+    volgendeWedstrijd(data.wedstrijden, vandaag) ??
+    data.jaarplan.evenementen.find((e) => e.type !== 'Reces' && e.datum >= vandaag)
 
   return (
     <>

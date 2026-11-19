@@ -1,18 +1,15 @@
-// Fix: fix-3 — jaarplan bewerken: taak Jaarplan of coördinator
-// Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
-import { createFileRoute } from '@tanstack/react-router'
-import { CalendarCheck2, Flag, Lock, Megaphone, PartyPopper, Pencil, Printer, Trophy } from 'lucide-react'
-import { useState } from 'react'
+// Fix: fix-21 — jaarplan als trainingsopbouw: tijdlijn, inleiding, aandachtsgebieden, zones en fases in blokken
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { Flag, Megaphone, Pencil, Plus, Printer, Settings2, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/app-shell'
-import { TrainerChip } from '@/components/trainer-avatar'
-import { Badge } from '@/components/ui/badge'
+import { JaarplanWissel } from '@/components/jaarplan-wissel'
+import { RijkeTekst, RijkeTekstEditor, heeftTekst } from '@/components/rijke-tekst'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -22,10 +19,37 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { magJaarplanBewerken, type Evenement, type Periode } from '@/data/fixtures'
-import { huidigePeriode, publiceerJaarplan, trainerById, useAppData, werkPeriodeBij } from '@/data/store'
-import { daysBetween, formatLong, formatMonth, formatRange, formatShort, todayISO } from '@/lib/dates'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  FASE_KLEUREN,
+  magJaarplanBewerken,
+  type Aandachtsgebied,
+  type Fase,
+  type Jaarplan,
+  type Opbouw,
+  type Wedstrijd,
+  type Zone,
+} from '@/data/fixtures'
+import {
+  faseOp,
+  huidigeOpbouw,
+  nieuwId,
+  opbouwBereik,
+  opbouwenOpVolgorde,
+  reces,
+  tijdlijnPositie,
+  volgendeWedstrijd,
+} from '@/data/jaarplan'
+import { OPBOUW_SEPT_DEC_2026 } from '@/data/jaarplan-voorbeeld'
+import {
+  bewaarOpbouw,
+  bewaarZones,
+  publiceerJaarplan,
+  trainerById,
+  useAppData,
+  verwijderOpbouw,
+} from '@/data/store'
+import { addDays, daysBetween, formatRange, formatShort, todayISO } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/jaarplan')({
@@ -33,40 +57,61 @@ export const Route = createFileRoute('/jaarplan')({
   component: JaarplanPagina,
 })
 
-const INTENSITEIT = ['', 'Rustig', 'Licht', 'Gemiddeld', 'Zwaar', 'Piek']
+const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
 
-const EVENT_ICON: Record<Evenement['type'], typeof Trophy> = {
-  Wedstrijd: Flag,
-  Kampioenschap: Trophy,
-  Club: PartyPopper,
-  Reces: CalendarCheck2,
+/** Zachte achtergrond bij een (fase- of zone)kleur. */
+const zacht = (kleur: string) => `color-mix(in srgb, ${kleur} 18%, white)`
+
+async function probeer(actie: () => Promise<unknown>, gelukt: string) {
+  try {
+    await actie()
+    toast.success(gelukt)
+    return true
+  } catch (err) {
+    console.error(err)
+    toast.error('Opslaan lukte niet. Probeer het opnieuw.')
+    return false
+  }
 }
 
 function JaarplanPagina() {
   const data = useAppData()
   const plan = data.jaarplan
-  const vandaag = todayISO()
-  const ik = trainerById(data.huidigeTrainerId)!
+  const ik = trainerById(data.huidigeTrainerId)
   const magBewerken = magJaarplanBewerken(ik)
-  const nu = huidigePeriode(data, vandaag)
-  const [bewerk, setBewerk] = useState<Periode | null>(null)
+  const vandaag = todayISO()
+  const opbouwen = opbouwenOpVolgorde(plan)
+  const [gekozen, setGekozen] = useState<string | null>(null)
+  const opbouw = opbouwen.find((o) => o.id === gekozen) ?? huidigeOpbouw(plan, vandaag)
+  const [faseOpen, setFaseOpen] = useState<{ opbouw: Opbouw; fase: Fase } | null>(null)
   const [publiceren, setPubliceren] = useState(false)
-  const gepubliceerdDoor = trainerById(plan.gepubliceerdDoor)
+  const [instellingen, setInstellingen] = useState<Opbouw | null>(null)
 
   return (
     <>
       <PageHeader
-        eyebrow={`Seizoen ${plan.seizoen}`}
-        title="Jaarplan"
+        eyebrow={`Jaarplan · seizoen ${plan.seizoen}`}
+        title="Trainingsopbouw"
         description={
           <p>
-            Van opstart in september naar de EuroGames in Cardiff (14–17 juli 2027). Elke periode heeft een doel en
-            accenten waar alle trainers in hun trainingen op aansluiten.
+            Wat trainen we wanneer: per opbouw een inleiding, aandachtsgebieden en fases met voorbeeldsets.{' '}
+            {plan.status === 'gepubliceerd'
+              ? `Gepubliceerd${plan.gepubliceerdOp ? ` op ${formatShort(plan.gepubliceerdOp)}` : ''} · versie ${plan.versie}.`
+              : 'Concept: nog niet gepubliceerd.'}
           </p>
         }
         actions={
           <>
-            <Button variant="outline" className="border-white/30 bg-white/5 text-white hover:bg-white/15 hover:text-white" onClick={() => window.print()}>
+            <Button asChild variant="secondary">
+              <Link to="/wedstrijden">
+                <Flag /> Wedstrijden
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              className="border-white/30 bg-white/5 text-white hover:bg-white/15 hover:text-white"
+              onClick={() => window.print()}
+            >
               <Printer /> Afdrukken
             </Button>
             {magBewerken && (
@@ -77,368 +122,1166 @@ function JaarplanPagina() {
           </>
         }
       />
+      <JaarplanWissel actief="opbouw" />
 
-      <div className="mx-auto max-w-content space-y-8 px-4 py-8 sm:px-6">
-        {/* Status */}
-        <div
-          role="status"
-          className={cn(
-            'flex flex-col gap-3 rounded-xl border p-4 text-sm sm:flex-row sm:items-center',
-            plan.status === 'concept' ? 'border-nat-yellow bg-nat-yellow/15' : 'bg-card',
-          )}
-        >
-          <Badge className={plan.status === 'concept' ? 'bg-nat-yellow text-nat-ink' : ''}>
-            {plan.status === 'concept' ? 'Concept' : `Gepubliceerd · versie ${plan.versie}`}
-          </Badge>
-          {plan.status === 'concept' ? (
-            <p>
-              Er zijn wijzigingen die nog niet gepubliceerd zijn. Andere trainers zien versie {plan.versie} tot je
-              publiceert.
-            </p>
-          ) : (
-            <p className="flex flex-wrap items-center gap-x-2">
-              Zichtbaar voor alle trainers. Gepubliceerd op {plan.gepubliceerdOp ? formatLong(plan.gepubliceerdOp) : '—'} door{' '}
-              {gepubliceerdDoor && <TrainerChip trainer={gepubliceerdDoor} />}
-            </p>
-          )}
-          {!magBewerken && (
-            <p className="flex items-center gap-1.5 text-muted-foreground sm:ml-auto">
-              <Lock className="size-3.5" aria-hidden /> Alleen de jaarplanbeheerder en de coördinator passen het jaarplan aan
-            </p>
+      <div className="mx-auto max-w-content space-y-6 px-4 py-6 sm:px-6">
+        <Tijdlijn plan={plan} wedstrijden={data.wedstrijden} vandaag={vandaag} onFase={(o, f) => setFaseOpen({ opbouw: o, fase: f })} />
+        <NuKaart plan={plan} wedstrijden={data.wedstrijden} vandaag={vandaag} onFase={(o, f) => setFaseOpen({ opbouw: o, fase: f })} />
+
+        <div className="flex flex-wrap items-center gap-2 print:hidden" role="tablist" aria-label="Opbouw">
+          {opbouwen.map((o) => (
+            <Button
+              key={o.id}
+              role="tab"
+              aria-selected={opbouw?.id === o.id}
+              variant={opbouw?.id === o.id ? 'default' : 'outline'}
+              className="rounded-full"
+              onClick={() => setGekozen(o.id)}
+            >
+              {o.naam}
+            </Button>
+          ))}
+          {magBewerken && (
+            <Button
+              variant="ghost"
+              className="rounded-full"
+              onClick={() => setInstellingen({ id: nieuwId('o'), naam: '', inleiding: '', doelWedstrijdId: null, aandachtsgebieden: [], fases: [] })}
+            >
+              <Plus /> Opbouw
+            </Button>
           )}
         </div>
 
-        <Tijdlijn periodes={plan.periodes} evenementen={plan.evenementen} van={plan.van} tot={plan.tot} vandaag={vandaag} />
+        {opbouw ? (
+          <OpbouwBlokken
+            key={opbouw.id}
+            opbouw={opbouw}
+            plan={plan}
+            wedstrijden={data.wedstrijden}
+            magBewerken={magBewerken}
+            onInstellingen={() => setInstellingen(opbouw)}
+            onFase={(f) => setFaseOpen({ opbouw, fase: f })}
+          />
+        ) : (
+          <LegeOpbouw magBewerken={magBewerken} />
+        )}
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
-          {/* Periodes */}
-          <section aria-labelledby="periodes-titel" className="space-y-4">
-            <h2 id="periodes-titel" className="text-2xl font-black tracking-tight">
-              Periodes
-            </h2>
-            {plan.periodes.map((p) => {
-              const weken = Math.max(1, Math.round((daysBetween(p.van, p.tot) + 1) / 7))
-              const actief = nu?.id === p.id
-              return (
-                <article
-                  key={p.id}
-                  className={cn('relative overflow-hidden rounded-xl border bg-card p-5 pl-7', actief && 'ring-2 ring-primary')}
-                >
-                  <span className="absolute inset-y-0 left-0 w-2" style={{ backgroundColor: p.kleur }} aria-hidden />
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-extrabold">{p.naam}</h3>
-                        {actief && <Badge>Nu bezig</Badge>}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {formatRange(p.van, p.tot)} · {weken} {weken === 1 ? 'week' : 'weken'}
-                      </p>
-                    </div>
-                    {magBewerken && (
-                      <Button variant="ghost" size="sm" onClick={() => setBewerk(p)} aria-label={`Bewerk ${p.naam}`}>
-                        <Pencil /> Bewerken
-                      </Button>
-                    )}
-                  </div>
-                  <p className="mt-3">{p.doel}</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.accenten.map((a) => (
-                        <Badge key={a} variant="secondary">
-                          {a}
-                        </Badge>
-                      ))}
-                    </div>
-                    <span className="text-muted-foreground">
-                      <span className="font-semibold text-foreground">{p.metersPerTraining}</span> per training
-                    </span>
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <span className="flex gap-0.5" aria-hidden>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <span
-                            key={i}
-                            className="h-3 w-1.5 rounded-sm"
-                            style={{ backgroundColor: i <= p.intensiteit ? p.kleur : 'var(--border)' }}
-                          />
-                        ))}
-                      </span>
-                      Belasting: {INTENSITEIT[p.intensiteit]}
-                    </span>
-                  </div>
-                </article>
-              )
-            })}
-          </section>
-
-          {/* Evenementen */}
-          <aside aria-labelledby="agenda-titel">
-            <Card className="lg:sticky lg:top-24">
-              <CardHeader>
-                <CardTitle id="agenda-titel" className="text-lg font-extrabold">
-                  Wedstrijden &amp; evenementen
-                </CardTitle>
-                <CardDescription>Ankerpunten waar het plan naartoe werkt.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ol className="relative space-y-5 border-l-2 border-border pl-5">
-                  {plan.evenementen.map((e) => {
-                    const Icon = EVENT_ICON[e.type]
-                    const voorbij = (e.einddatum ?? e.datum) < vandaag
-                    return (
-                      <li key={e.id} className={cn('relative', voorbij && 'opacity-50')}>
-                        <span
-                          className={cn(
-                            'absolute top-0.5 -left-[31px] flex size-5 items-center justify-center rounded-full ring-4 ring-card',
-                            e.type === 'Kampioenschap' ? 'bg-primary text-white' : 'bg-nat-ink text-white',
-                          )}
-                          aria-hidden
-                        >
-                          <Icon className="size-3" />
-                        </span>
-                        <p className="text-sm font-bold leading-snug">{e.naam}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {e.einddatum ? formatRange(e.datum, e.einddatum) : formatShort(e.datum)} · {e.type}
-                          {!e.bevestigd && ' · datum onder voorbehoud'}
-                        </p>
-                      </li>
-                    )
-                  })}
-                </ol>
-              </CardContent>
-            </Card>
-          </aside>
-        </div>
+        <ZonesBlok zones={plan.zones} magBewerken={magBewerken} />
       </div>
 
-      <PeriodeDialog periode={bewerk} onClose={() => setBewerk(null)} />
-
-      <Dialog open={publiceren} onOpenChange={setPubliceren}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Jaarplan publiceren?</DialogTitle>
-            <DialogDescription>
-              Versie {plan.versie + 1} wordt zichtbaar voor alle {data.trainers.length} trainers en vervangt de huidige
-              versie in hun overzicht.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Annuleren</Button>
-            </DialogClose>
-            <Button
-              onClick={() => {
-                publiceerJaarplan(vandaag)
-                setPubliceren(false)
-                toast.success('Jaarplan gepubliceerd', { description: `Versie ${plan.versie + 1} staat live voor alle trainers.` })
-              }}
-            >
-              <Megaphone /> Publiceren
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {faseOpen && (
+        <FaseSheet
+          opbouw={faseOpen.opbouw}
+          fase={faseOpen.fase}
+          zones={plan.zones}
+          magBewerken={magBewerken}
+          onClose={() => setFaseOpen(null)}
+        />
+      )}
+      {instellingen && (
+        <OpbouwDialog
+          opbouw={instellingen}
+          nieuw={!plan.opbouwen.some((o) => o.id === instellingen.id)}
+          wedstrijden={data.wedstrijden}
+          onKlaar={(id) => {
+            setInstellingen(null)
+            if (id) setGekozen(id)
+          }}
+        />
+      )}
+      <PubliceerDialog open={publiceren} onOpenChange={setPubliceren} plan={plan} />
     </>
   )
 }
 
+// --- Tijdlijn ------------------------------------------------------------------
+
 function Tijdlijn({
-  periodes,
-  evenementen,
-  van,
-  tot,
+  plan,
+  wedstrijden,
   vandaag,
+  onFase,
 }: {
-  periodes: Periode[]
-  evenementen: Evenement[]
-  van: string
-  tot: string
+  plan: Jaarplan
+  wedstrijden: Wedstrijd[]
   vandaag: string
+  onFase: (o: Opbouw, f: Fase) => void
 }) {
-  const totaal = daysBetween(van, tot) + 1
-  const pos = (d: string) => `${(Math.min(Math.max(daysBetween(van, d), 0), totaal) / totaal) * 100}%`
-  const maanden: string[] = []
-  for (let d = van.slice(0, 8) + '01'; d <= tot; ) {
-    if (d >= van) maanden.push(d)
-    const [y, m] = d.split('-').map(Number)
-    d = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const pos = (van: string, tot?: string) => tijdlijnPositie(plan.van, plan.tot, van, tot)
+  const maanden: { naam: string; links: number }[] = []
+  for (let d = `${plan.van.slice(0, 7)}-01`; d <= plan.tot; ) {
+    if (d >= plan.van) maanden.push({ naam: MAANDEN[Number(d.slice(5, 7)) - 1], links: pos(d).links })
+    const [j, m] = d.split('-').map(Number)
+    d = m === 12 ? `${j + 1}-01-01` : `${j}-${String(m + 1).padStart(2, '0')}-01`
   }
-  const inSeizoen = vandaag >= van && vandaag <= tot
+  const vandaagIn = vandaag >= plan.van && vandaag <= plan.tot
+  // Op een smal scherm scrolt de tijdlijn; begin dan rond vandaag.
+  const scroller = useRef<HTMLDivElement>(null)
+  const vandaagLinks = vandaagIn ? tijdlijnPositie(plan.van, plan.tot, vandaag).links : 0
+  useEffect(() => {
+    const el = scroller.current
+    if (el && el.scrollWidth > el.clientWidth) el.scrollLeft = (vandaagLinks / 100) * el.scrollWidth - el.clientWidth / 3
+  }, [vandaagLinks])
+  const zichtbareWedstrijden = wedstrijden.filter((w) => w.datum >= plan.van && w.datum <= plan.tot)
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg font-extrabold">Seizoensoverzicht</CardTitle>
-        <CardDescription>Hoogte van elk blok = geplande belasting.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto pb-2">
-          <div className="relative min-w-[760px]">
-            {/* Evenementen */}
-            <div className="relative mb-2 h-7">
-              {evenementen.map((e) => (
+    <section aria-labelledby="tijdlijn-kop" className="rounded-2xl border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="tijdlijn-kop" className="text-lg font-extrabold">
+          Tijdlijn {plan.seizoen}
+        </h2>
+        <p className="text-sm text-muted-foreground">Klik op een blok voor de inhoud van die fase</p>
+      </div>
+      <div ref={scroller} className="mt-4 overflow-x-auto pb-1">
+        <div className="relative min-w-[760px] pt-7">
+          <div className="relative h-5 text-xs font-bold text-muted-foreground" aria-hidden>
+            {maanden.map((m) => (
+              <span key={`${m.naam}${m.links}`} className="absolute border-l pl-1" style={{ left: `${m.links}%` }}>
+                {m.naam}
+              </span>
+            ))}
+          </div>
+          <div className="relative mb-1 h-5" aria-hidden>
+            {opbouwenOpVolgorde(plan).map((o) => {
+              const b = opbouwBereik(o)
+              if (!b) return null
+              const p = pos(b.van, b.tot)
+              return (
                 <span
-                  key={e.id}
-                  className="absolute top-1 -translate-x-1/2"
-                  style={{ left: pos(e.datum) }}
-                  title={`${e.naam} · ${formatShort(e.datum)}`}
+                  key={o.id}
+                  className="absolute truncate text-[11px] font-extrabold uppercase tracking-wide"
+                  style={{ left: `${p.links}%`, width: `${p.breedte}%` }}
                 >
-                  <span
-                    className={cn(
-                      'block size-3 rotate-45 rounded-[2px]',
-                      e.type === 'Kampioenschap' ? 'size-4 bg-primary' : 'bg-nat-ink/70',
-                    )}
-                  />
-                  <span className="sr-only">
-                    {e.naam}, {formatShort(e.datum)}
-                  </span>
+                  {o.naam}
                 </span>
-              ))}
-            </div>
-            {/* Blokken */}
-            <div className="relative flex h-36 items-end gap-0.5 border-b-2 border-nat-ink/80">
-              {periodes.map((p) => {
-                const breedte = ((daysBetween(p.van, p.tot) + 1) / totaal) * 100
+              )
+            })}
+          </div>
+          <div className="relative h-[72px] rounded-lg bg-muted">
+            {reces(plan).map((r) => {
+              const p = pos(r.datum, r.einddatum ?? r.datum)
+              return (
+                <span
+                  key={r.id}
+                  title={r.naam}
+                  className="absolute inset-y-0 flex items-end justify-center overflow-hidden rounded-md pb-1 text-[11px] font-bold text-muted-foreground"
+                  style={{
+                    left: `${p.links}%`,
+                    width: `${p.breedte}%`,
+                    background: 'repeating-linear-gradient(135deg, var(--border) 0 6px, transparent 6px 12px)',
+                  }}
+                >
+                  <span className="truncate px-1">{r.naam}</span>
+                </span>
+              )
+            })}
+            {plan.opbouwen.flatMap((o) =>
+              o.fases.map((f, i) => {
+                const p = pos(f.van, f.tot)
                 return (
-                  <div
-                    key={p.id}
-                    className="group relative flex flex-col justify-end overflow-hidden rounded-t-md px-1.5 pb-1.5 text-[11px] leading-tight font-bold"
-                    style={{
-                      width: `${breedte}%`,
-                      height: `${20 + p.intensiteit * 16}%`,
-                      backgroundColor: p.kleur,
-                      color: p.kleur === '#ffce00' || p.kleur === '#bdb2b2' || p.kleur === '#8cbb15' ? '#2b2222' : '#fff',
-                    }}
-                    title={`${p.naam}: ${formatRange(p.van, p.tot)}`}
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => onFase(o, f)}
+                    aria-label={`Fase ${i + 1}: ${f.naam}, ${formatRange(f.van, f.tot)}`}
+                    className="absolute inset-y-1.5 flex flex-col gap-0.5 overflow-hidden rounded-md p-1.5 text-left text-[11px] leading-tight text-white outline-none hover:brightness-95 focus-visible:ring-[3px] focus-visible:ring-ring"
+                    style={{ left: `${p.links}%`, width: `calc(${p.breedte}% - 3px)`, background: f.kleur }}
                   >
-                    <span className="line-clamp-3 break-words">{p.naam}</span>
-                  </div>
+                    <span className="font-extrabold">Fase {i + 1}</span>
+                    <span className="truncate opacity-95">{f.naam}</span>
+                  </button>
                 )
-              })}
-              {inSeizoen && (
-                <div className="pointer-events-none absolute inset-y-0 -mt-9" style={{ left: pos(vandaag) }}>
-                  <div className="h-full w-0.5 bg-primary" />
-                  <span className="absolute -top-1 left-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-white">
-                    Vandaag
-                  </span>
-                </div>
-              )}
-            </div>
-            {/* Maanden */}
-            <div className="relative mt-2 h-5 text-xs font-semibold text-muted-foreground uppercase">
-              {maanden.map((m) => (
-                <span key={m} className="absolute" style={{ left: pos(m) }}>
-                  {formatMonth(m).replace('.', '')}
+              }),
+            )}
+            {vandaagIn && (
+              <>
+                <span className="absolute -inset-y-2.5 w-0.5 bg-foreground" style={{ left: `${pos(vandaag).links}%` }} aria-hidden />
+                <span
+                  className="absolute -top-7 -translate-x-1/2 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-extrabold text-background"
+                  style={{ left: `${pos(vandaag).links}%` }}
+                >
+                  vandaag
                 </span>
-              ))}
-            </div>
+              </>
+            )}
+          </div>
+          <div className="relative mt-2 h-14">
+            {zichtbareWedstrijden.map((w, i) => (
+              <Link
+                key={w.id}
+                to="/wedstrijden"
+                className={cn(
+                  'absolute inline-flex max-w-48 items-center gap-1 truncate rounded-full px-2 py-1 text-xs font-bold whitespace-nowrap',
+                  w.doel
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border border-dashed border-muted-foreground bg-card text-foreground',
+                )}
+                style={{
+                  left: `min(${pos(w.datum).links}%, calc(100% - 12rem))`,
+                  top: i % 2 === 0 ? 0 : 28,
+                }}
+              >
+                <Flag className="size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">
+                  {w.naam} · {formatShort(w.datum)}
+                  {w.onderVoorbehoud ? ' (o.v.)' : ''}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>Blok = fase</span>
+        <span>Vlag = wedstrijd (rood: doelwedstrijd, gestippeld: niet doel)</span>
+        <span>Gestreept = geen training</span>
+      </p>
+    </section>
   )
 }
 
-function PeriodeDialog({ periode, onClose }: { periode: Periode | null; onClose: () => void }) {
+// --- Nu --------------------------------------------------------------------------
+
+function ZoneChip({ zone }: { zone?: Zone }) {
+  if (!zone) return null
   return (
-    <Dialog open={!!periode} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        {periode && <PeriodeForm key={periode.id} periode={periode} onClose={onClose} />}
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold text-foreground"
+      style={{ background: zacht(zone.kleur) }}
+    >
+      <span className="size-2.5 rounded-full" style={{ background: zone.kleur }} aria-hidden />
+      {zone.naam}
+    </span>
+  )
+}
+
+function NuKaart({
+  plan,
+  wedstrijden,
+  vandaag,
+  onFase,
+}: {
+  plan: Jaarplan
+  wedstrijden: Wedstrijd[]
+  vandaag: string
+  onFase: (o: Opbouw, f: Fase) => void
+}) {
+  const nu = faseOp(plan, vandaag)
+  const volgende = volgendeWedstrijd(wedstrijden, vandaag)
+  if (!nu) {
+    if (!volgende) return null
+    return (
+      <p className="rounded-2xl border bg-card p-4 text-sm">
+        Er loopt nu geen fase. Volgende wedstrijd: <strong>{volgende.naam}</strong> op {formatShort(volgende.datum)} (nog{' '}
+        {daysBetween(vandaag, volgende.datum)} dagen).
+      </p>
+    )
+  }
+  const doel = wedstrijden.find((w) => w.id === nu.opbouw.doelWedstrijdId) ?? volgende
+  return (
+    <section
+      aria-labelledby="nu-kop"
+      className="grid gap-5 rounded-2xl border-2 bg-card p-4 sm:p-5 md:grid-cols-2"
+      style={{ borderColor: nu.fase.kleur }}
+    >
+      <div className="space-y-3">
+        <p className="text-xs font-extrabold tracking-[0.16em] uppercase text-muted-foreground">
+          Nu · fase {nu.nummer} van {nu.opbouw.fases.length}
+        </p>
+        <h2 id="nu-kop" className="text-xl font-extrabold sm:text-2xl">
+          {nu.fase.naam}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {formatRange(nu.fase.van, nu.fase.tot)}
+          {doel && doel.datum >= vandaag && (
+            <>
+              {' '}
+              · nog {daysBetween(vandaag, doel.datum)} dagen tot {doel.naam}
+            </>
+          )}
+        </p>
+        {heeftTekst(nu.fase.doel) && <RijkeTekst html={nu.fase.doel} />}
+        <div className="flex flex-wrap gap-1.5">
+          {nu.fase.zones.map((id) => (
+            <ZoneChip key={id} zone={plan.zones.find((z) => z.id === id)} />
+          ))}
+        </div>
+      </div>
+      <div className="rounded-xl bg-muted/60 p-4">
+        <h3 className="mb-2 text-sm font-extrabold">Voorbeeldsets</h3>
+        {nu.fase.sets.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nog geen voorbeeldsets.</p>
+        ) : (
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm">
+            {nu.fase.sets.slice(0, 3).map((s, i) => (
+              <li key={i}>
+                <RijkeTekst html={s} />
+              </li>
+            ))}
+          </ol>
+        )}
+        <Button variant="link" className="mt-1 h-auto px-0" onClick={() => onFase(nu.opbouw, nu.fase)}>
+          Hele fase bekijken ›
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+// --- Blokken van een opbouw ----------------------------------------------------------
+
+function Blok({
+  nr,
+  titel,
+  sub,
+  actie,
+  children,
+  id,
+}: {
+  nr: string
+  titel: string
+  sub?: string
+  actie?: ReactNode
+  children: ReactNode
+  id: string
+}) {
+  return (
+    <section aria-labelledby={id} className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-extrabold" aria-hidden>
+          {nr}
+        </span>
+        <h3 id={id} className="flex-1 text-lg font-extrabold">
+          {titel}
+          {sub && <span className="ml-2 text-sm font-medium text-muted-foreground">{sub}</span>}
+        </h3>
+        {actie}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function BewerkKnop({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button variant="outline" size="icon" className="size-10 print:hidden" aria-label={label} onClick={onClick}>
+      <Pencil />
+    </Button>
+  )
+}
+
+function OpbouwBlokken({
+  opbouw,
+  plan,
+  wedstrijden,
+  magBewerken,
+  onInstellingen,
+  onFase,
+}: {
+  opbouw: Opbouw
+  plan: Jaarplan
+  wedstrijden: Wedstrijd[]
+  magBewerken: boolean
+  onInstellingen: () => void
+  onFase: (f: Fase) => void
+}) {
+  const [inleiding, setInleiding] = useState(false)
+  const [aandacht, setAandacht] = useState<Aandachtsgebied | null>(null)
+  const [fase, setFase] = useState<Fase | null>(null)
+  const bereik = opbouwBereik(opbouw)
+  const doel = wedstrijden.find((w) => w.id === opbouw.doelWedstrijdId)
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-foreground px-4 py-3 text-background sm:px-5">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-extrabold">{opbouw.naam}</h2>
+          <p className="text-sm opacity-80">
+            {bereik ? formatRange(bereik.van, bereik.tot) : 'Nog geen fases'}
+            {doel && ` · doelwedstrijd: ${doel.naam} (${formatShort(doel.datum)})`}
+          </p>
+        </div>
+        {magBewerken && (
+          <Button variant="secondary" size="sm" onClick={onInstellingen} className="print:hidden">
+            <Settings2 /> Instellingen
+          </Button>
+        )}
+      </div>
+
+      <Blok
+        nr="1"
+        id="blok-inleiding"
+        titel="Inleiding"
+        actie={magBewerken && <BewerkKnop label="Inleiding bewerken" onClick={() => setInleiding(true)} />}
+      >
+        <div className="rounded-2xl border bg-card p-4 sm:p-5">
+          {heeftTekst(opbouw.inleiding) ? (
+            <RijkeTekst html={opbouw.inleiding} className="max-w-reading" />
+          ) : (
+            <p className="text-muted-foreground">Nog geen inleiding.</p>
+          )}
+        </div>
+      </Blok>
+
+      <Blok
+        nr="2"
+        id="blok-aandacht"
+        titel="Aandachtsgebieden"
+        actie={
+          magBewerken && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="print:hidden"
+              onClick={() => setAandacht({ id: nieuwId('a'), titel: '', tekst: '' })}
+            >
+              <Plus /> Aandachtsgebied
+            </Button>
+          )
+        }
+      >
+        {opbouw.aandachtsgebieden.length === 0 ? (
+          <p className="text-muted-foreground">Nog geen aandachtsgebieden.</p>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {opbouw.aandachtsgebieden.map((a) => (
+              <article key={a.id} className="space-y-2 rounded-2xl border bg-card p-4">
+                <div className="flex items-start gap-2">
+                  <h4 className="flex-1 font-extrabold leading-snug">{a.titel}</h4>
+                  {magBewerken && <BewerkKnop label={`${a.titel} bewerken`} onClick={() => setAandacht(a)} />}
+                </div>
+                <RijkeTekst html={a.tekst} className="text-sm" />
+              </article>
+            ))}
+          </div>
+        )}
+      </Blok>
+
+      <Blok
+        nr="3"
+        id="blok-fases"
+        titel="Fases"
+        actie={
+          magBewerken && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="print:hidden"
+              onClick={() => {
+                const laatste = opbouw.fases[opbouw.fases.length - 1]
+                const van = laatste ? addDays(laatste.tot, 1) : todayISO()
+                setFase({
+                  id: nieuwId('f'),
+                  naam: '',
+                  van,
+                  tot: addDays(van, 27),
+                  kleur: FASE_KLEUREN[opbouw.fases.length % FASE_KLEUREN.length].waarde,
+                  doel: '',
+                  zones: [],
+                  zonesToelichting: '',
+                  techniek: '',
+                  letOp: '',
+                  sets: [],
+                })
+              }}
+            >
+              <Plus /> Fase
+            </Button>
+          )
+        }
+      >
+        {opbouw.fases.length === 0 ? (
+          <p className="text-muted-foreground">Nog geen fases.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {opbouw.fases.map((f, i) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onFase(f)}
+                className="flex flex-col overflow-hidden rounded-2xl border bg-card text-left outline-none hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <span className="h-2" style={{ background: f.kleur }} aria-hidden />
+                <span className="flex flex-1 flex-col gap-1.5 p-4">
+                  <span className="text-xs font-extrabold tracking-wider text-muted-foreground uppercase">
+                    Fase {i + 1} · {Math.max(1, Math.round((daysBetween(f.van, f.tot) + 1) / 7))} weken
+                  </span>
+                  <span className="font-extrabold leading-snug">{f.naam}</span>
+                  <span className="text-sm text-muted-foreground">{formatRange(f.van, f.tot)}</span>
+                  <span className="line-clamp-3 text-sm">
+                    <RijkeTekst html={f.doel} />
+                  </span>
+                  <span className="mt-auto flex flex-wrap gap-1 pt-1">
+                    {f.zones.map((id) => (
+                      <ZoneChip key={id} zone={plan.zones.find((z) => z.id === id)} />
+                    ))}
+                  </span>
+                  <span className="text-sm font-bold text-primary">{f.sets.length} voorbeeldsets ›</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Blok>
+
+      {inleiding && (
+        <TekstDialog
+          titel="Inleiding bewerken"
+          waarde={opbouw.inleiding}
+          onClose={() => setInleiding(false)}
+          onBewaar={(tekst) => bewaarOpbouw({ ...opbouw, inleiding: tekst })}
+        />
+      )}
+      {aandacht && <AandachtDialog opbouw={opbouw} item={aandacht} onClose={() => setAandacht(null)} />}
+      {fase && <FaseDialog opbouw={opbouw} fase={fase} zones={plan.zones} onClose={() => setFase(null)} />}
+    </div>
+  )
+}
+
+function LegeOpbouw({ magBewerken }: { magBewerken: boolean }) {
+  const [bezig, setBezig] = useState(false)
+  return (
+    <div className="space-y-3 rounded-2xl border border-dashed p-6 text-center">
+      <p className="font-bold">Er is nog geen trainingsopbouw.</p>
+      {magBewerken ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Begin met een nieuwe opbouw, of laad de trainingsopbouw sept–dec 2026 uit het Word-document in.
+          </p>
+          <Button
+            disabled={bezig}
+            onClick={async () => {
+              setBezig(true)
+              await probeer(() => bewaarOpbouw(OPBOUW_SEPT_DEC_2026), 'Trainingsopbouw sept–dec 2026 ingeladen')
+              setBezig(false)
+            }}
+          >
+            Trainingsopbouw sept–dec 2026 inladen
+          </Button>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">De trainer die het jaarplan maakt, vult dit in.</p>
+      )}
+    </div>
+  )
+}
+
+// --- Zones ------------------------------------------------------------------------------
+
+function ZonesBlok({ zones, magBewerken }: { zones: Zone[]; magBewerken: boolean }) {
+  const [bewerken, setBewerken] = useState(false)
+  return (
+    <Blok
+      nr="Z"
+      id="blok-zones"
+      titel="Trainingszones"
+      sub="naslag voor het hele seizoen"
+      actie={magBewerken && <BewerkKnop label="Trainingszones bewerken" onClick={() => setBewerken(true)} />}
+    >
+      <ul className="grid gap-2 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
+        {zones.map((z) => (
+          <li key={z.id} className="flex gap-3 rounded-xl p-2.5" style={{ background: zacht(z.kleur) }}>
+            <span className="mt-1 size-3.5 shrink-0 rounded-full" style={{ background: z.kleur }} aria-hidden />
+            <span>
+              <strong>
+                {z.naam} {z.percentage && <span className="font-semibold text-muted-foreground">{z.percentage}</span>}
+              </strong>
+              <span className="block text-sm">{z.omschrijving}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {bewerken && <ZonesDialog zones={zones} onClose={() => setBewerken(false)} />}
+    </Blok>
+  )
+}
+
+function ZonesDialog({ zones, onClose }: { zones: Zone[]; onClose: () => void }) {
+  const [lijst, setLijst] = useState<Zone[]>(zones)
+  const [bezig, setBezig] = useState(false)
+  const zet = (i: number, w: Partial<Zone>) => setLijst((l) => l.map((z, j) => (j === i ? { ...z, ...w } : z)))
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Trainingszones bewerken</DialogTitle>
+          <DialogDescription>Fases verwijzen naar deze zones. Een zone verwijderen haalt hem ook uit de fases.</DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-3">
+          {lijst.map((z, i) => (
+            <li key={z.id} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_7rem_auto]">
+              <div className="space-y-1">
+                <Label htmlFor={`zn-${z.id}`}>Naam</Label>
+                <Input id={`zn-${z.id}`} value={z.naam} maxLength={40} onChange={(e) => zet(i, { naam: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`zp-${z.id}`}>Percentage</Label>
+                <Input id={`zp-${z.id}`} value={z.percentage} maxLength={20} onChange={(e) => zet(i, { percentage: e.target.value })} />
+              </div>
+              <div className="flex items-end gap-1">
+                <KleurKiezer waarde={z.kleur} onChange={(k) => zet(i, { kleur: k })} label={`Kleur ${z.naam}`} extra={['#9fd3ec']} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`${z.naam || 'Zone'} verwijderen`}
+                  onClick={() => setLijst((l) => l.filter((_, j) => j !== i))}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+              <div className="space-y-1 sm:col-span-3">
+                <Label htmlFor={`zo-${z.id}`}>Omschrijving</Label>
+                <Input id={`zo-${z.id}`} value={z.omschrijving} maxLength={200} onChange={(e) => zet(i, { omschrijving: e.target.value })} />
+              </div>
+            </li>
+          ))}
+        </ul>
+        <Button
+          variant="outline"
+          onClick={() => setLijst((l) => [...l, { id: nieuwId('z'), naam: '', kleur: '#41a8da', percentage: '', omschrijving: '' }])}
+        >
+          <Plus /> Zone
+        </Button>
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          <Button variant="outline" onClick={onClose}>
+            Annuleren
+          </Button>
+          <Button
+            disabled={bezig || lijst.some((z) => !z.naam.trim())}
+            onClick={async () => {
+              setBezig(true)
+              if (await probeer(() => bewaarZones(lijst.map((z) => ({ ...z, naam: z.naam.trim() }))), 'Zones opgeslagen')) onClose()
+              setBezig(false)
+            }}
+          >
+            Opslaan
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-function PeriodeForm({ periode, onClose }: { periode: Periode; onClose: () => void }) {
-  const [form, setForm] = useState({ ...periode, accentenTekst: periode.accenten.join(', ') })
-  const fout = form.tot < form.van ? 'De einddatum ligt vóór de startdatum.' : !form.naam.trim() ? 'Geef de periode een naam.' : ''
-
+function KleurKiezer({
+  waarde,
+  onChange,
+  label,
+  extra = [],
+}: {
+  waarde: string
+  onChange: (k: string) => void
+  label: string
+  extra?: string[]
+}) {
+  const kleuren = [...extra, ...FASE_KLEUREN.map((k) => k.waarde)]
   return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (fout) return
-        const { accentenTekst, ...rest } = form
-        werkPeriodeBij({
-          ...rest,
-          naam: rest.naam.trim(),
-          accenten: accentenTekst.split(',').map((a) => a.trim()).filter(Boolean),
-        })
-        toast.success('Periode bijgewerkt', { description: 'Publiceer het jaarplan om de wijziging te delen.' })
-        onClose()
-      }}
-    >
-      <DialogHeader>
-        <DialogTitle>Periode bewerken</DialogTitle>
-        <DialogDescription>Wijzigingen blijven concept tot je het jaarplan publiceert.</DialogDescription>
-      </DialogHeader>
-      <div className="space-y-2">
-        <Label htmlFor="p-naam">Naam</Label>
-        <Input id="p-naam" value={form.naam} onChange={(e) => setForm({ ...form, naam: e.target.value })} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="p-van">Van</Label>
-          <Input id="p-van" type="date" value={form.van} onChange={(e) => setForm({ ...form, van: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="p-tot">Tot en met</Label>
-          <Input
-            id="p-tot"
-            type="date"
-            value={form.tot}
-            min={form.van}
-            onChange={(e) => setForm({ ...form, tot: e.target.value })}
-          />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="p-doel">Doel</Label>
-        <Textarea id="p-doel" rows={3} value={form.doel} onChange={(e) => setForm({ ...form, doel: e.target.value })} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="p-acc">Accenten (komma-gescheiden)</Label>
-        <Input id="p-acc" value={form.accentenTekst} onChange={(e) => setForm({ ...form, accentenTekst: e.target.value })} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="p-m">Meters per training</Label>
-          <Input
-            id="p-m"
-            value={form.metersPerTraining}
-            onChange={(e) => setForm({ ...form, metersPerTraining: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="p-int">Belasting</Label>
-          <Select value={String(form.intensiteit)} onValueChange={(v) => setForm({ ...form, intensiteit: Number(v) })}>
-            <SelectTrigger id="p-int" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <SelectItem key={i} value={String(i)}>
-                  {i} · {INTENSITEIT[i]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      {fout && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {fout}
-        </p>
-      )}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Annuleren
-        </Button>
-        <Button type="submit" disabled={!!fout}>
-          Opslaan als concept
-        </Button>
-      </DialogFooter>
-    </form>
+    <Select value={waarde} onValueChange={onChange}>
+      <SelectTrigger aria-label={label} className="w-20">
+        <span className="size-5 rounded-full" style={{ background: waarde }} aria-hidden />
+      </SelectTrigger>
+      <SelectContent>
+        {kleuren.map((k) => (
+          <SelectItem key={k} value={k}>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-4 rounded-full" style={{ background: k }} aria-hidden />
+              {FASE_KLEUREN.find((f) => f.waarde === k)?.naam ?? 'Lichtblauw'}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
+
+// --- Fase bekijken ------------------------------------------------------------------------
+
+function FaseSheet({
+  opbouw,
+  fase,
+  zones,
+  magBewerken,
+  onClose,
+}: {
+  opbouw: Opbouw
+  fase: Fase
+  zones: Zone[]
+  magBewerken: boolean
+  onClose: () => void
+}) {
+  const [bewerken, setBewerken] = useState(false)
+  const nr = opbouw.fases.findIndex((f) => f.id === fase.id) + 1
+  // Na bewerken de nieuwste versie tonen.
+  const actueel = useAppData().jaarplan.opbouwen.find((o) => o.id === opbouw.id)?.fases.find((f) => f.id === fase.id) ?? fase
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-lg">
+        <div className="space-y-1 p-5 pr-12 text-white" style={{ background: actueel.kleur }}>
+          <SheetHeader className="p-0">
+            <p className="text-xs font-extrabold tracking-[0.16em] uppercase">
+              Fase {nr} van {opbouw.fases.length} · {opbouw.naam}
+            </p>
+            <SheetTitle className="text-2xl font-extrabold text-white">{actueel.naam}</SheetTitle>
+            <SheetDescription className="font-semibold text-white/90">{formatRange(actueel.van, actueel.tot)}</SheetDescription>
+          </SheetHeader>
+          {magBewerken && (
+            <Button size="sm" variant="secondary" className="mt-2" onClick={() => setBewerken(true)}>
+              <Pencil /> Bewerken
+            </Button>
+          )}
+        </div>
+        <div className="space-y-4 p-5">
+          <FaseOnderdeel titel="Doel" html={actueel.doel} />
+          <section className="space-y-2 rounded-xl border p-4">
+            <h3 className="text-xs font-extrabold tracking-wider text-muted-foreground uppercase">Trainingszones</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {actueel.zones.map((id) => (
+                <ZoneChip key={id} zone={zones.find((z) => z.id === id)} />
+              ))}
+            </div>
+            {actueel.zonesToelichting && <p className="text-sm">{actueel.zonesToelichting}</p>}
+          </section>
+          <FaseOnderdeel titel="Techniek, keerpunten & starts" html={actueel.techniek} />
+          {heeftTekst(actueel.letOp) && (
+            <section className="rounded-xl border border-nat-yellow bg-nat-yellow/20 p-4">
+              <h3 className="mb-1 text-xs font-extrabold tracking-wider uppercase">Let op</h3>
+              <RijkeTekst html={actueel.letOp} />
+            </section>
+          )}
+          <section className="space-y-2">
+            <h3 className="text-lg font-extrabold">Voorbeeldsets</h3>
+            <p className="text-sm text-muted-foreground">Illustraties: geef er je eigen draai aan.</p>
+            {actueel.sets.length === 0 && <p className="text-sm text-muted-foreground">Nog geen voorbeeldsets.</p>}
+            <ol className="space-y-2">
+              {actueel.sets.map((s, i) => (
+                <li key={i} className="flex gap-3 rounded-xl border p-3">
+                  <span
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold"
+                    style={{ background: zacht(actueel.kleur) }}
+                    aria-hidden
+                  >
+                    {i + 1}
+                  </span>
+                  <RijkeTekst html={s} className="text-sm" />
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+        {bewerken && <FaseDialog opbouw={opbouw} fase={actueel} zones={zones} onClose={() => setBewerken(false)} />}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function FaseOnderdeel({ titel, html }: { titel: string; html: string }) {
+  if (!heeftTekst(html)) return null
+  return (
+    <section className="rounded-xl border p-4">
+      <h3 className="mb-1 text-xs font-extrabold tracking-wider text-muted-foreground uppercase">{titel}</h3>
+      <RijkeTekst html={html} />
+    </section>
+  )
+}
+
+// --- Bewerken -----------------------------------------------------------------------------
+
+function TekstDialog({
+  titel,
+  waarde,
+  onClose,
+  onBewaar,
+}: {
+  titel: string
+  waarde: string
+  onClose: () => void
+  onBewaar: (html: string) => Promise<void>
+}) {
+  const [tekst, setTekst] = useState(waarde)
+  const [bezig, setBezig] = useState(false)
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{titel}</DialogTitle>
+          <DialogDescription>Plakken uit Word houdt opsommingen, vet en kleuren vast.</DialogDescription>
+        </DialogHeader>
+        <RijkeTekstEditor id="tekst" label={titel} waarde={tekst} onChange={setTekst} minHoogte="min-h-56" />
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          <Button variant="outline" onClick={onClose}>
+            Annuleren
+          </Button>
+          <Button
+            disabled={bezig}
+            onClick={async () => {
+              setBezig(true)
+              if (await probeer(() => onBewaar(tekst), 'Opgeslagen')) onClose()
+              setBezig(false)
+            }}
+          >
+            Opslaan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AandachtDialog({ opbouw, item, onClose }: { opbouw: Opbouw; item: Aandachtsgebied; onClose: () => void }) {
+  const [titel, setTitel] = useState(item.titel)
+  const [tekst, setTekst] = useState(item.tekst)
+  const [bezig, setBezig] = useState(false)
+  const bestaat = opbouw.aandachtsgebieden.some((a) => a.id === item.id)
+
+  async function bewaar(e: FormEvent) {
+    e.preventDefault()
+    setBezig(true)
+    const nieuw = { ...item, titel: titel.trim(), tekst }
+    const lijst = bestaat ? opbouw.aandachtsgebieden.map((a) => (a.id === item.id ? nieuw : a)) : [...opbouw.aandachtsgebieden, nieuw]
+    if (await probeer(() => bewaarOpbouw({ ...opbouw, aandachtsgebieden: lijst }), 'Aandachtsgebied opgeslagen')) onClose()
+    setBezig(false)
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl">
+        <form onSubmit={bewaar} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>{bestaat ? 'Aandachtsgebied bewerken' : 'Nieuw aandachtsgebied'}</DialogTitle>
+            <DialogDescription>Bijv. een rode draad door het seizoen of hoe je differentieert naar niveau.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="ag-titel">Titel</Label>
+            <Input id="ag-titel" value={titel} maxLength={120} required onChange={(e) => setTitel(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ag-tekst">Tekst</Label>
+            <RijkeTekstEditor id="ag-tekst" label="Tekst aandachtsgebied" waarde={tekst} onChange={setTekst} minHoogte="min-h-48" />
+          </div>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+            {bestaat ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive"
+                onClick={async () => {
+                  if (!window.confirm(`"${item.titel}" verwijderen?`)) return
+                  if (
+                    await probeer(
+                      () => bewaarOpbouw({ ...opbouw, aandachtsgebieden: opbouw.aandachtsgebieden.filter((a) => a.id !== item.id) }),
+                      'Verwijderd',
+                    )
+                  )
+                    onClose()
+                }}
+              >
+                <Trash2 /> Verwijderen
+              </Button>
+            ) : (
+              <span />
+            )}
+            <span className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Annuleren
+              </Button>
+              <Button type="submit" disabled={bezig || !titel.trim()}>
+                Opslaan
+              </Button>
+            </span>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function FaseDialog({ opbouw, fase, zones, onClose }: { opbouw: Opbouw; fase: Fase; zones: Zone[]; onClose: () => void }) {
+  const [f, setF] = useState<Fase>(fase)
+  // Sleutels voor de voorbeeldsets, zodat editors bij verwijderen niet verspringen.
+  const [setSleutels, setSetSleutels] = useState(() => fase.sets.map(() => nieuwId('s')))
+  const [bezig, setBezig] = useState(false)
+  const bestaat = opbouw.fases.some((x) => x.id === fase.id)
+  const zet = (w: Partial<Fase>) => setF((x) => ({ ...x, ...w }))
+  const fout = !f.naam.trim() ? 'Geef de fase een naam.' : f.van > f.tot ? 'De einddatum ligt vóór de begindatum.' : ''
+
+  async function bewaar(e: FormEvent) {
+    e.preventDefault()
+    if (fout) return
+    setBezig(true)
+    const nieuw = { ...f, naam: f.naam.trim(), sets: f.sets.filter(heeftTekst) }
+    const fases = bestaat ? opbouw.fases.map((x) => (x.id === f.id ? nieuw : x)) : [...opbouw.fases, nieuw]
+    if (await probeer(() => bewaarOpbouw({ ...opbouw, fases: fases.sort((a, b) => a.van.localeCompare(b.van)) }), 'Fase opgeslagen'))
+      onClose()
+    setBezig(false)
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-2xl">
+        <form onSubmit={bewaar} className="space-y-5">
+          <DialogHeader>
+            <DialogTitle>{bestaat ? 'Fase bewerken' : 'Nieuwe fase'}</DialogTitle>
+            <DialogDescription>{opbouw.naam}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="space-y-1.5">
+              <Label htmlFor="f-naam">Naam van de fase</Label>
+              <Input id="f-naam" value={f.naam} maxLength={80} onChange={(e) => zet({ naam: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label id="f-kleur-label">Kleur</Label>
+              <KleurKiezer waarde={f.kleur} onChange={(k) => zet({ kleur: k })} label="Kleur op de tijdlijn" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="f-van">Van</Label>
+              <Input id="f-van" type="date" value={f.van} onChange={(e) => zet({ van: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-tot">Tot en met</Label>
+              <Input id="f-tot" type="date" value={f.tot} onChange={(e) => zet({ tot: e.target.value })} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-doel">Doel</Label>
+            <RijkeTekstEditor id="f-doel" label="Doel" waarde={f.doel} onChange={(doel) => zet({ doel })} />
+          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Trainingszones</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {zones.map((z) => {
+                const aan = f.zones.includes(z.id)
+                return (
+                  <button
+                    key={z.id}
+                    type="button"
+                    aria-pressed={aan}
+                    onClick={() => zet({ zones: aan ? f.zones.filter((x) => x !== z.id) : [...f.zones, z.id] })}
+                    className={cn(
+                      'inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-sm font-bold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                      aan ? 'border-foreground bg-foreground text-background' : 'bg-background',
+                    )}
+                  >
+                    <span className="size-2.5 rounded-full" style={{ background: z.kleur }} aria-hidden />
+                    {z.naam}
+                  </button>
+                )
+              })}
+            </div>
+            <Label htmlFor="f-zt" className="pt-1 text-xs text-muted-foreground">
+              Toelichting (optioneel)
+            </Label>
+            <Input id="f-zt" value={f.zonesToelichting} maxLength={300} onChange={(e) => zet({ zonesToelichting: e.target.value })} />
+          </fieldset>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-tech">Techniek, keerpunten &amp; starts</Label>
+            <RijkeTekstEditor id="f-tech" label="Techniek, keerpunten en starts" waarde={f.techniek} onChange={(techniek) => zet({ techniek })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="f-letop">Let op (optioneel)</Label>
+            <RijkeTekstEditor id="f-letop" label="Let op" waarde={f.letOp} onChange={(letOp) => zet({ letOp })} minHoogte="min-h-16" />
+          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Voorbeeldsets</legend>
+            {f.sets.map((s, i) => (
+              <div key={setSleutels[i]} className="flex items-start gap-2">
+                <span className="mt-12 w-5 text-sm font-extrabold text-muted-foreground" aria-hidden>
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <RijkeTekstEditor
+                    id={`set-${setSleutels[i]}`}
+                    label={`Voorbeeldset ${i + 1}`}
+                    waarde={s}
+                    minHoogte="min-h-14"
+                    onChange={(html) => zet({ sets: f.sets.map((x, j) => (j === i ? html : x)) })}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mt-10"
+                  aria-label={`Voorbeeldset ${i + 1} verwijderen`}
+                  onClick={() => {
+                    zet({ sets: f.sets.filter((_, j) => j !== i) })
+                    setSetSleutels((k) => k.filter((_, j) => j !== i))
+                  }}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                zet({ sets: [...f.sets, ''] })
+                setSetSleutels((k) => [...k, nieuwId('s')])
+              }}
+            >
+              <Plus /> Voorbeeldset
+            </Button>
+          </fieldset>
+          {fout && <p className="text-sm text-destructive">{fout}</p>}
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+            {bestaat ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive"
+                onClick={async () => {
+                  if (!window.confirm(`Fase "${fase.naam}" verwijderen?`)) return
+                  if (await probeer(() => bewaarOpbouw({ ...opbouw, fases: opbouw.fases.filter((x) => x.id !== fase.id) }), 'Fase verwijderd'))
+                    onClose()
+                }}
+              >
+                <Trash2 /> Verwijderen
+              </Button>
+            ) : (
+              <span />
+            )}
+            <span className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Annuleren
+              </Button>
+              <Button type="submit" disabled={bezig || !!fout}>
+                Opslaan
+              </Button>
+            </span>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function OpbouwDialog({
+  opbouw,
+  nieuw,
+  wedstrijden,
+  onKlaar,
+}: {
+  opbouw: Opbouw
+  nieuw: boolean
+  wedstrijden: Wedstrijd[]
+  onKlaar: (id?: string) => void
+}) {
+  const [naam, setNaam] = useState(opbouw.naam)
+  const [doel, setDoel] = useState(opbouw.doelWedstrijdId ?? 'geen')
+  const [bezig, setBezig] = useState(false)
+  return (
+    <Dialog open onOpenChange={(o) => !o && onKlaar()}>
+      <DialogContent>
+        <form
+          className="space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setBezig(true)
+            const ok = await probeer(
+              () => bewaarOpbouw({ ...opbouw, naam: naam.trim(), doelWedstrijdId: doel === 'geen' ? null : doel }),
+              nieuw ? 'Opbouw aangemaakt' : 'Opgeslagen',
+            )
+            setBezig(false)
+            if (ok) onKlaar(opbouw.id)
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{nieuw ? 'Nieuwe opbouw' : 'Opbouw instellen'}</DialogTitle>
+            <DialogDescription>
+              Een opbouw werkt toe naar een doelwedstrijd, bijv. sept–dec naar Frankfurt of na het kerstreces naar de EuroGames.
+              Begin en eind volgen uit de fases.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="o-naam">Naam</Label>
+            <Input
+              id="o-naam"
+              value={naam}
+              maxLength={60}
+              required
+              placeholder="Bijv. Jan–jul 2027 · naar Cardiff"
+              onChange={(e) => setNaam(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="o-doel">Doelwedstrijd</Label>
+            <Select value={doel} onValueChange={setDoel}>
+              <SelectTrigger id="o-doel" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="geen">Geen</SelectItem>
+                {wedstrijden.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.naam} · {formatShort(w.datum)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {wedstrijden.length === 0 && (
+              <p className="text-xs text-muted-foreground">Voeg eerst wedstrijden toe via de knop Wedstrijden.</p>
+            )}
+          </div>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+            {!nieuw ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive"
+                onClick={async () => {
+                  if (!window.confirm(`Opbouw "${opbouw.naam}" met alle fases verwijderen?`)) return
+                  if (await probeer(() => verwijderOpbouw(opbouw.id), 'Opbouw verwijderd')) onKlaar()
+                }}
+              >
+                <Trash2 /> Verwijderen
+              </Button>
+            ) : (
+              <span />
+            )}
+            <span className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" variant="outline" onClick={() => onKlaar()}>
+                Annuleren
+              </Button>
+              <Button type="submit" disabled={bezig || !naam.trim()}>
+                Opslaan
+              </Button>
+            </span>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PubliceerDialog({ open, onOpenChange, plan }: { open: boolean; onOpenChange: (o: boolean) => void; plan: Jaarplan }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Jaarplan publiceren?</DialogTitle>
+          <DialogDescription>
+            Alle trainers zien dan versie {plan.versie + 1} als de geldende versie. Daarna kun je verder bewerken; het plan staat
+            dan weer op concept tot je opnieuw publiceert.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Annuleren
+          </Button>
+          <Button
+            onClick={() => {
+              publiceerJaarplan(todayISO())
+              toast.success('Jaarplan gepubliceerd')
+              onOpenChange(false)
+            }}
+          >
+            <Megaphone /> Publiceren
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

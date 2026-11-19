@@ -33,6 +33,7 @@ function zet(huidigeTrainerId: string) {
     roosterWijzigingen: {},
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
+    wedstrijden: [],
   }
   __zetTestData(d)
 }

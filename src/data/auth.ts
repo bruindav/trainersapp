@@ -1,3 +1,4 @@
+// Fix: fix-21 — taak wedstrijdBeheer bij uitnodiging en inrichting
 // Fix: fix-19 — geen uitnodigingslink meer via Firebase (EmailJS + Google-inlog)
 // Fix: fix-18 — uitnodigingsmail met inloglink; mails in het Nederlands
 /**
@@ -157,6 +158,7 @@ async function bepaalToegang(user: User, mijnGeneratie = generatie) {
         jaarplanBeheer: u.jaarplanBeheer === true,
         teamBeheer: u.teamBeheer === true,
         toezichthouder: u.toezichthouder === true,
+        wedstrijdBeheer: u.wedstrijdBeheer === true,
       })
       batch.delete(uitnodigingRef)
       await batch.commit()
@@ -285,6 +287,7 @@ export async function richAppIn(user: User, naam: string, geeftZelfTraining: boo
     jaarplanBeheer: true,
     teamBeheer: true,
     toezichthouder: false,
+    wedstrijdBeheer: false,
   })
   batch.set(doc(db, 'config', 'setup'), { hoofdtrainerUid: user.uid, op: serverTimestamp() })
   batch.set(doc(db, ...JAARPLAN_DOC), { ...STANDAARD_JAARPLAN, gepubliceerdDoor: user.uid })

@@ -2,6 +2,7 @@
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
  * Fix: fix-17 — naam van een teamlid wijzigen.
+ * Fix: fix-21 — wedstrijden, jaarplan met opbouwen en zones (seizoensoverzicht blijft).
  * Fix: fix-15 — ritme van vaste trainers opslaan.
  * Fix: fix-12 — vaste trainers en geldigheid van trainingsmomenten.
  * Fix: fix-11 — vrijgeven, overnemen, ruilverzoeken, wijzigingslog; publiceren met volledige indeling.
@@ -46,6 +47,9 @@ import {
   type Afwezigheid,
   type AppData,
   type Jaarplan,
+  type Opbouw,
+  type Wedstrijd,
+  type Zone,
   type Periode,
   geeftTraining,
   type Taken,
@@ -66,6 +70,7 @@ import {
   type Trainingsmoment,
 } from './rooster'
 import { volledig, type Indeling, type IndelingMap } from './indeling'
+import { normaliseerJaarplan, zonderUndefined } from './jaarplan'
 import type { LogRegel, LogSoort, Ruilverzoek } from './wijzigingen'
 
 /** Pad van het (ene) jaarplan-document. */
@@ -86,6 +91,7 @@ function leegeData(uid = ''): AppData {
     roosterWijzigingen: {},
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
+    wedstrijden: [],
   }
 }
 
@@ -166,6 +172,7 @@ export function naarTrainer(id: string, d: DocumentData): Trainer {
     jaarplanBeheer: d.jaarplanBeheer === true || oudeHoofdtrainer,
     teamBeheer: d.teamBeheer === true || oudeHoofdtrainer,
     toezichthouder: d.toezichthouder === true,
+    wedstrijdBeheer: d.wedstrijdBeheer === true,
   }
 }
 
@@ -259,11 +266,35 @@ export function startSync(uid: string, magTeam: boolean): () => void {
     onSnapshot(
       doc(db, ...JAARPLAN_DOC),
       (snap) => {
-        const jaarplan = snap.exists() ? (snap.data() as Jaarplan) : STANDAARD_JAARPLAN
+        const jaarplan = normaliseerJaarplan(snap.exists() ? snap.data() : undefined)
         setState((s) => ({ ...s, jaarplan }))
         geladen('jaarplan')
       },
       fout('jaarplan'),
+    ),
+    onSnapshot(
+      collection(db, 'wedstrijden'),
+      (snap) => {
+        const wedstrijden = snap.docs
+          .map((d): Wedstrijd => {
+            const x = d.data()
+            return {
+              id: d.id,
+              naam: String(x.naam ?? ''),
+              datum: String(x.datum ?? ''),
+              ...(x.einddatum ? { einddatum: String(x.einddatum) } : {}),
+              plaats: String(x.plaats ?? ''),
+              baan: x.baan === '25' || x.baan === '50' ? x.baan : '',
+              ...(x.inschrijvenVoor ? { inschrijvenVoor: String(x.inschrijvenVoor) } : {}),
+              onderVoorbehoud: x.onderVoorbehoud === true,
+              doel: x.doel === true,
+              notitie: String(x.notitie ?? ''),
+            }
+          })
+          .sort((a, b) => a.datum.localeCompare(b.datum))
+        setState((s) => ({ ...s, wedstrijden }))
+      },
+      (err) => console.error('Firestore-listener wedstrijden', err),
     ),
   ]
 
@@ -419,6 +450,7 @@ export function startSync(uid: string, magTeam: boolean): () => void {
                 jaarplanBeheer: x.jaarplanBeheer === true,
                 teamBeheer: x.teamBeheer === true,
                 toezichthouder: x.toezichthouder === true,
+                wedstrijdBeheer: x.wedstrijdBeheer === true,
               }
               return u
             })
@@ -573,6 +605,41 @@ export function werkPeriodeBij(periode: Periode) {
   setDoc(doc(getDb(), ...JAARPLAN_DOC), jaarplan).catch(meldFout('Periode opslaan'))
 }
 
+// --- Trainingsopbouw (fix-21) -------------------------------------------------
+
+/** Schrijft het hele jaarplan met een wijziging; elke wijziging maakt het weer concept. */
+async function schrijfJaarplan(wijziging: Partial<Jaarplan>) {
+  const jaarplan: Jaarplan = { ...state.jaarplan, ...wijziging, status: 'concept' }
+  await setDoc(doc(getDb(), ...JAARPLAN_DOC), zonderUndefined(jaarplan))
+}
+
+export async function bewaarOpbouw(opbouw: Opbouw) {
+  const bestaat = state.jaarplan.opbouwen.some((o) => o.id === opbouw.id)
+  await schrijfJaarplan({
+    opbouwen: bestaat
+      ? state.jaarplan.opbouwen.map((o) => (o.id === opbouw.id ? opbouw : o))
+      : [...state.jaarplan.opbouwen, opbouw],
+  })
+}
+
+export async function verwijderOpbouw(id: string) {
+  await schrijfJaarplan({ opbouwen: state.jaarplan.opbouwen.filter((o) => o.id !== id) })
+}
+
+export async function bewaarZones(zones: Zone[]) {
+  await schrijfJaarplan({ zones })
+}
+
+export async function bewaarWedstrijd(w: Wedstrijd) {
+  const { id, ...rest } = w
+  const ref = id ? doc(getDb(), 'wedstrijden', id) : doc(collection(getDb(), 'wedstrijden'))
+  await setDoc(ref, zonderUndefined(rest))
+}
+
+export async function verwijderWedstrijd(id: string) {
+  await deleteDoc(doc(getDb(), 'wedstrijden', id))
+}
+
 export function publiceerJaarplan(datum: string) {
   const jaarplan: Jaarplan = {
     ...state.jaarplan,
@@ -607,6 +674,7 @@ export async function nodigTrainerUit(u: Omit<Uitnodiging, 'uitgenodigdOp'>) {
     jaarplanBeheer: u.jaarplanBeheer,
     teamBeheer: u.teamBeheer,
     toezichthouder: u.toezichthouder,
+    wedstrijdBeheer: u.wedstrijdBeheer,
   })
 }
 
@@ -667,6 +735,7 @@ export async function voegTesttrainersToe() {
       jaarplanBeheer: false,
       teamBeheer: false,
       toezichthouder: toezicht.has(naam),
+      wedstrijdBeheer: false,
     })
   })
   await batch.commit()

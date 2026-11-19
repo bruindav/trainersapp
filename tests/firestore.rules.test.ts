@@ -512,3 +512,48 @@ describe('feedback', () => {
     await assertSucceeds(deleteDoc(doc(als(HOOFD), 'feedback', 'f1')))
   })
 })
+
+// Fix: fix-21 — trainingsopbouw in het jaarplan en wedstrijden
+describe('trainingsopbouw en wedstrijden', () => {
+  beforeEach(standaardTeam)
+  const WED = { uid: 'wed', email: 'wed@nat.nl' }
+  const JP = { uid: 'jp', email: 'jp@nat.nl' }
+  const wedstrijd = (extra: Record<string, unknown> = {}) => ({
+    naam: 'Frankfurt',
+    datum: '2026-12-05',
+    plaats: 'Frankfurt',
+    baan: '25',
+    onderVoorbehoud: false,
+    doel: true,
+    notitie: '',
+    ...extra,
+  })
+  async function zetRollen() {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'trainers', WED.uid), trainerDoc('Wed', 'Trainer', WED.email, { wedstrijdBeheer: true }))
+      await setDoc(doc(db, 'trainers', JP.uid), trainerDoc('Jp', 'Trainer', JP.email, { jaarplanBeheer: true }))
+    })
+  }
+
+  it('jaarplanbeheerder bewaart opbouwen en zones', async () => {
+    await zetRollen()
+    const opbouw = { id: 'o1', naam: 'Sept–dec', inleiding: '<p>Hoi</p>', doelWedstrijdId: null, aandachtsgebieden: [], fases: [] }
+    await assertSucceeds(setDoc(doc(als(JP), 'jaarplan', 'huidig'), { ...JAARPLAN, zones: [], opbouwen: [opbouw] }))
+    await assertFails(setDoc(doc(als(TRAINER), 'jaarplan', 'huidig'), { ...JAARPLAN, zones: [], opbouwen: [opbouw] }))
+    await assertFails(setDoc(doc(als(WED), 'jaarplan', 'huidig'), { ...JAARPLAN, opbouwen: [] }))
+  })
+
+  it('wedstrijden: coördinator, jaarplanbeheerder en wedstrijdcoördinator; trainers lezen', async () => {
+    await zetRollen()
+    await assertSucceeds(setDoc(doc(als(WED), 'wedstrijden', 'w1'), wedstrijd()))
+    await assertSucceeds(setDoc(doc(als(JP), 'wedstrijden', 'w2'), wedstrijd({ einddatum: '2026-12-06' })))
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'wedstrijden', 'w3'), wedstrijd({ inschrijvenVoor: '2026-11-20' })))
+    await assertFails(setDoc(doc(als(TRAINER), 'wedstrijden', 'w4'), wedstrijd()))
+    await assertSucceeds(getDoc(doc(als(TRAINER), 'wedstrijden', 'w1')))
+    await assertFails(setDoc(doc(als(WED), 'wedstrijden', 'w5'), wedstrijd({ einddatum: '2026-12-01' })))
+    await assertFails(setDoc(doc(als(WED), 'wedstrijden', 'w6'), wedstrijd({ baan: '33' })))
+    await assertFails(setDoc(doc(als(WED), 'wedstrijden', 'w7'), wedstrijd({ naam: '' })))
+    await assertFails(deleteDoc(doc(als(TRAINER), 'wedstrijden', 'w1')))
+    await assertSucceeds(deleteDoc(doc(als(WED), 'wedstrijden', 'w1')))
+  })
+})

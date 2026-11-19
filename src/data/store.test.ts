@@ -25,6 +25,7 @@ function data(over: Partial<AppData> = {}): AppData {
     roosterWijzigingen: {},
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
+    wedstrijden: [],
     ...over,
   }
 }
