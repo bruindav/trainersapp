@@ -1,3 +1,4 @@
+// Fix: fix-11 — vrijgeven, overnemen, ruilen
 // Fix: fix-10 — indeling
 // Fix: fix-5 — momenten, periodes, beschikbaarheid
 // Fix: fix-3 — coördinator, taken, toezichthouders, migratie oude hoofdtrainer
@@ -10,7 +11,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { FieldPath, deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
 let env: RulesTestEnvironment
@@ -374,5 +375,92 @@ describe('roosterperiodes en beschikbaarheid', () => {
     await assertFails(
       setDoc(doc(als(TRAINER), 'roosterperiodes', 'open', 'beschikbaarheid', TRAINER.uid), { ...besch(TRAINER.uid), telefoon: '06' }),
     )
+  })
+})
+
+describe('na publicatie: vrijgeven, overnemen, ruilen', () => {
+  const C = { uid: 'c', email: 'c@nat.nl' }
+  const A = '2027-01-05|m1'
+  const B = '2027-01-07|m2'
+  const basis = (status: string, indeling: Record<string, unknown>) => ({
+    naam: 'Deel 2', soort: 'wekelijks', van: '2027-01-04', tot: '2027-07-04', status, deadline: null,
+    momentIds: ['m1', 'm2'], losseTrainingen: [], vervallenData: [], versie: 1, indeling,
+  })
+  beforeEach(async () => {
+    await standaardTeam()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'trainers', C.uid), trainerDoc('C', 'Trainer', C.email))
+      await setDoc(
+        doc(db, 'roosterperiodes', 'p'),
+        basis('gepubliceerd', {
+          [A]: { trainers: [TRAINER.uid], nodig: 2 },
+          [B]: { trainers: [C.uid], nodig: 1 },
+        }),
+      )
+      await setDoc(doc(db, 'roosterperiodes', 'concept'), basis('indelen', { [A]: { trainers: [TRAINER.uid], nodig: 1 } }))
+    })
+  })
+  const wijziging = (uid: string, soort: string, key: string, extra: Record<string, unknown> = {}) => ({
+    soort, key, door: uid, op: serverTimestamp(), ...extra,
+  })
+
+  it('eigen plek vrijgeven mag, andermans niet', async () => {
+    const ref = doc(als(TRAINER), 'roosterperiodes', 'p')
+    await assertSucceeds(
+      updateDoc(ref, new FieldPath('indeling', A), { trainers: [], nodig: 2 }, 'laatsteWijziging', wijziging(TRAINER.uid, 'vrijgeven', A)),
+    )
+    await assertFails(
+      updateDoc(doc(als(TRAINER), 'roosterperiodes', 'p'), new FieldPath('indeling', B), { trainers: [], nodig: 1 }, 'laatsteWijziging', wijziging(TRAINER.uid, 'vrijgeven', B)),
+    )
+  })
+  it('open plek overnemen mag; een volle niet; niet vóór publicatie', async () => {
+    await assertSucceeds(
+      updateDoc(doc(als(C), 'roosterperiodes', 'p'), new FieldPath('indeling', A), { trainers: [TRAINER.uid, C.uid], nodig: 2 }, 'laatsteWijziging', wijziging(C.uid, 'overnemen', A)),
+    )
+    await assertFails(
+      updateDoc(doc(als(TRAINER), 'roosterperiodes', 'p'), new FieldPath('indeling', B), { trainers: [C.uid, TRAINER.uid], nodig: 1 }, 'laatsteWijziging', wijziging(TRAINER.uid, 'overnemen', B)),
+    )
+    await assertFails(
+      updateDoc(doc(als(C), 'roosterperiodes', 'concept'), new FieldPath('indeling', A), { trainers: [TRAINER.uid, C.uid], nodig: 1 }, 'laatsteWijziging', wijziging(C.uid, 'overnemen', A)),
+    )
+    // Stiekem ook 'nodig' verhogen mag niet.
+    await assertFails(
+      updateDoc(doc(als(C), 'roosterperiodes', 'p'), new FieldPath('indeling', B), { trainers: [C.uid, TRAINER.uid], nodig: 2 }, 'laatsteWijziging', wijziging(TRAINER.uid, 'overnemen', B)),
+    )
+  })
+  it('ruilen kan alleen via een geaccepteerd verzoek, door de gevraagde collega', async () => {
+    const verzoek = { periodeId: 'p', van: TRAINER.uid, naar: C.uid, vanKey: A, terugKey: B, status: 'open', bericht: '', aangemaaktOp: serverTimestamp() }
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'ruilverzoeken', 'v1'), verzoek))
+    await assertFails(setDoc(doc(als(TRAINER), 'ruilverzoeken', 'v2'), { ...verzoek, van: C.uid }))
+    // Alleen status zetten zonder roosterwijziging: geweigerd.
+    await assertFails(updateDoc(doc(als(C), 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() }))
+    // Een ander kan niet accepteren.
+    const anders = writeBatch(als(HOOFD))
+    anders.update(doc(als(HOOFD), 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() })
+    await assertFails(anders.commit())
+    // De gevraagde collega accepteert: beide trainingen wisselen in één keer.
+    const db = als(C)
+    const b = writeBatch(db)
+    b.update(
+      doc(db, 'roosterperiodes', 'p'),
+      new FieldPath('indeling', A), { trainers: [C.uid], nodig: 2 },
+      new FieldPath('indeling', B), { trainers: [TRAINER.uid], nodig: 1 },
+      'laatsteWijziging', wijziging(C.uid, 'ruil', A, { verzoekId: 'v1' }),
+    )
+    b.update(doc(db, 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() })
+    await assertSucceeds(b.commit())
+  })
+  it('weigeren en intrekken', async () => {
+    const verzoek = { periodeId: 'p', van: TRAINER.uid, naar: C.uid, vanKey: A, terugKey: null, status: 'open', bericht: 'Kun jij?', aangemaaktOp: serverTimestamp() }
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'ruilverzoeken', 'v3'), verzoek))
+    await assertFails(updateDoc(doc(als(TRAINER), 'ruilverzoeken', 'v3'), { status: 'geweigerd', afgehandeldOp: serverTimestamp() }))
+    await assertSucceeds(updateDoc(doc(als(C), 'ruilverzoeken', 'v3'), { status: 'geweigerd', afgehandeldOp: serverTimestamp() }))
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'ruilverzoeken', 'v4'), verzoek))
+    await assertSucceeds(updateDoc(doc(als(TRAINER), 'ruilverzoeken', 'v4'), { status: 'ingetrokken', afgehandeldOp: serverTimestamp() }))
+  })
+  it('wijzigingslog: alleen namens jezelf', async () => {
+    const regel = { soort: 'vrijgeven', tekst: 'x', door: TRAINER.uid, op: serverTimestamp() }
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p', 'wijzigingslog', 'l1'), regel))
+    await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p', 'wijzigingslog', 'l2'), { ...regel, door: C.uid }))
   })
 })

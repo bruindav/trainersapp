@@ -1,3 +1,4 @@
+// Fix: fix-11 — externe trainer, zwemmers trainen zelf, open plekken; nodig altijd opgeslagen
 // Fix: fix-10 — indelen: voorstel, waarschuwingen en tellingen (pure functies, getest)
 import type { Toezichthouder, Trainer } from './fixtures'
 import { kanNietOp, type Beschikbaarheid, type PeriodeTraining } from './rooster'
@@ -13,12 +14,37 @@ export interface Indeling {
    * `trainer:<uid>` of `groep:<id>` (iemand uit de groep toezichthouders).
    */
   toezicht?: string | null
+  /** Naam van een externe trainer die een plek invult. */
+  extern?: string
+  /** De externe trainer is toezichthouder-bevoegd. */
+  externToezicht?: boolean
+  /** Zwemmers trainen zelf (geen trainer nodig, wel toezicht). */
+  zelf?: boolean
+  /** Id van een training uit het logboek als schema voor "zelf trainen". */
+  schema?: string
 }
 
 export type IndelingMap = Record<string, Indeling>
 
 export function nodigVoor(t: PeriodeTraining, i: Indeling | undefined) {
   return i?.nodig ?? t.trainersNodig
+}
+
+/** Aantal nog open trainersplekken. */
+export function openPlekken(t: PeriodeTraining, i: Indeling | undefined) {
+  if (i?.zelf) return 0
+  return Math.max(0, nodigVoor(t, i) - (i?.trainers.length ?? 0) - (i?.extern ? 1 : 0))
+}
+
+/** Velden die bij het opnieuw indelen of opslaan altijd mee moeten. */
+export function volledig(t: PeriodeTraining, i: Indeling | undefined): Indeling {
+  const uit: Indeling = { trainers: i?.trainers ?? [], nodig: nodigVoor(t, i) }
+  if (i?.toezicht) uit.toezicht = i.toezicht
+  if (i?.extern) uit.extern = i.extern
+  if (i?.externToezicht) uit.externToezicht = true
+  if (i?.zelf) uit.zelf = true
+  if (i?.schema) uit.schema = i.schema
+  return uit
 }
 
 export function maandVan(datum: string) {
@@ -59,7 +85,7 @@ export function maakVoorstel(
 
   for (const t of trainingen) {
     const bestaand = huidige[t.key]
-    const nodig = nodigVoor(t, bestaand)
+    const nodig = bestaand?.zelf ? 0 : nodigVoor(t, bestaand) - (bestaand?.extern ? 1 : 0)
     const gekozen: Trainer[] = []
     const maand = maandVan(t.datum)
 
@@ -101,10 +127,7 @@ export function maakVoorstel(
       perMaand.set(`${keuze.id}|${maand}`, (perMaand.get(`${keuze.id}|${maand}`) ?? 0) + 1)
     }
 
-    const entry: Indeling = { trainers: gekozen.map((g) => g.id) }
-    if (bestaand?.nodig !== undefined) entry.nodig = bestaand.nodig
-    if (bestaand?.toezicht) entry.toezicht = bestaand.toezicht
-    uit[t.key] = entry
+    uit[t.key] = { ...volledig(t, bestaand), trainers: gekozen.map((g) => g.id) }
   }
   return uit
 }
@@ -128,13 +151,14 @@ export function controleer(
   const uit: Waarschuwing[] = []
   const ids = i?.trainers ?? []
   const ingedeeld = ids.map((id) => trainers.find((x) => x.id === id)).filter((x): x is Trainer => !!x)
-  const nodig = nodigVoor(t, i)
-  if (ids.length < nodig) {
-    uit.push({ soort: 'open', tekst: nodig - ids.length === 1 ? '1 open plek' : `${nodig - ids.length} open plekken`, ernstig: true })
+  const open = openPlekken(t, i)
+  if (open > 0) {
+    uit.push({ soort: 'open', tekst: open === 1 ? '1 open plek' : `${open} open plekken`, ernstig: true })
   }
-  const toezichtGeregeld = !!i?.toezicht || ingedeeld.some((x) => x.toezichthouder)
+  const toezichtGeregeld =
+    !!i?.toezicht || ingedeeld.some((x) => x.toezichthouder) || (!!i?.extern && !!i?.externToezicht)
   if (!toezichtGeregeld) uit.push({ soort: 'toezicht', tekst: 'Geen toezichthouder', ernstig: true })
-  if (ingedeeld.length > 0 && ingedeeld.every((x) => x.rol === 'Assistent-trainer')) {
+  if (ingedeeld.length > 0 && !i?.extern && ingedeeld.every((x) => x.rol === 'Assistent-trainer')) {
     uit.push({ soort: 'assistent', tekst: 'Assistent-trainer alleen', ernstig: false })
   }
   for (const x of ingedeeld) {

@@ -27,6 +27,8 @@ function zet(huidigeTrainerId: string) {
     trainingsmomenten: [],
     roosterperiodes: [],
     beschikbaarheid: {},
+    ruilverzoeken: [],
+    wijzigingslog: [],
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],

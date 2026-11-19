@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-11 — vrijgeven, overnemen, ruilverzoeken, wijzigingslog; publiceren met volledige indeling.
  * Fix: fix-10 — indeling opslaan en publiceren.
  * Fix: fix-8 — testbeschikbaarheid voor testtrainers.
  * Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
@@ -52,6 +53,7 @@ import {
 } from './fixtures'
 import {
   STANDAARD_MOMENTEN,
+  trainingenInPeriode,
   type Beschikbaarheid,
   type DatumBereik,
   type Keuze,
@@ -60,7 +62,8 @@ import {
   type Roosterperiode,
   type Trainingsmoment,
 } from './rooster'
-import type { Indeling, IndelingMap } from './indeling'
+import { volledig, type Indeling, type IndelingMap } from './indeling'
+import type { LogRegel, LogSoort, Ruilverzoek } from './wijzigingen'
 
 /** Pad van het (ene) jaarplan-document. */
 export const JAARPLAN_DOC = ['jaarplan', 'huidig'] as const
@@ -74,6 +77,8 @@ function leegeData(uid = ''): AppData {
     trainingsmomenten: [],
     roosterperiodes: [],
     beschikbaarheid: {},
+    ruilverzoeken: [],
+    wijzigingslog: [],
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],
@@ -328,6 +333,53 @@ export function startSync(uid: string, magTeam: boolean): () => void {
         setState((s) => ({ ...s, beschikbaarheid }))
       },
       (err) => console.error('Firestore-listener beschikbaarheid', err),
+    ),
+  )
+
+  stops.push(
+    onSnapshot(
+      collection(db, 'ruilverzoeken'),
+      (snap) => {
+        const ruilverzoeken = snap.docs.map((d) => {
+          const x = d.data()
+          const v: Ruilverzoek = {
+            id: d.id,
+            periodeId: String(x.periodeId ?? ''),
+            van: String(x.van ?? ''),
+            naar: String(x.naar ?? ''),
+            vanKey: String(x.vanKey ?? ''),
+            terugKey: x.terugKey ?? null,
+            status: x.status ?? 'open',
+            bericht: String(x.bericht ?? ''),
+            aangemaaktOp: x.aangemaaktOp?.toDate?.().toISOString?.() ?? '',
+          }
+          return v
+        })
+        setState((s) => ({ ...s, ruilverzoeken }))
+      },
+      (err) => console.error('Firestore-listener ruilverzoeken', err),
+    ),
+    onSnapshot(
+      collectionGroup(db, 'wijzigingslog'),
+      (snap) => {
+        const wijzigingslog = snap.docs
+          .map((d) => {
+            const x = d.data()
+            const l: LogRegel = {
+              id: d.id,
+              periodeId: d.ref.parent.parent?.id ?? '',
+              soort: x.soort,
+              tekst: String(x.tekst ?? ''),
+              door: String(x.door ?? ''),
+              op: x.op?.toDate?.().toISOString?.() ?? new Date().toISOString(),
+            }
+            return l
+          })
+          .sort((a, b) => (a.op < b.op ? 1 : -1))
+          .slice(0, 100)
+        setState((s) => ({ ...s, wijzigingslog }))
+      },
+      (err) => console.error('Firestore-listener wijzigingslog', err),
     ),
   )
 
@@ -751,9 +803,14 @@ export async function wisTestbeschikbaarheid(periodeId: string) {
 
 /** Wijzigt de indeling van één training. */
 export async function zetIndeling(periodeId: string, key: string, indeling: Indeling) {
+  // Alleen gevulde velden opslaan (Firestore kent geen undefined).
   const schoon: Indeling = { trainers: indeling.trainers }
   if (indeling.nodig !== undefined) schoon.nodig = indeling.nodig
   if (indeling.toezicht) schoon.toezicht = indeling.toezicht
+  if (indeling.extern) schoon.extern = indeling.extern
+  if (indeling.extern && indeling.externToezicht) schoon.externToezicht = true
+  if (indeling.zelf) schoon.zelf = true
+  if (indeling.zelf && indeling.schema) schoon.schema = indeling.schema
   await updateDoc(doc(getDb(), 'roosterperiodes', periodeId), new FieldPath('indeling', key), schoon)
 }
 
@@ -763,10 +820,127 @@ export async function zetHeleIndeling(periodeId: string, indeling: IndelingMap) 
 }
 
 export async function publiceerRooster(periode: Roosterperiode) {
+  // Bij publiceren krijgt elke training een volledige indeling (met 'nodig'),
+  // zodat trainers daarna veilig kunnen vrijgeven en overnemen.
+  const trainingen = trainingenInPeriode(periode, state.trainingsmomenten, state.jaarplan)
+  const indeling: IndelingMap = {}
+  trainingen.forEach((t) => (indeling[t.key] = volledig(t, periode.indeling[t.key])))
   await updateDoc(doc(getDb(), 'roosterperiodes', periode.id), {
+    indeling,
     status: 'gepubliceerd',
     versie: periode.versie + 1,
     gepubliceerdOp: serverTimestamp(),
     gepubliceerdDoor: state.huidigeTrainerId,
   })
+}
+
+// ---------------------------------------------------------------------------
+// Fix: fix-11 — wijzigingen na publicatie (door trainers zelf)
+// ---------------------------------------------------------------------------
+
+function voornaamVan(id: string) {
+  return (trainerById(id)?.naam ?? 'Iemand').split(' ')[0]
+}
+
+function logRegel(batch: ReturnType<typeof writeBatch>, periodeId: string, soort: LogSoort, tekst: string) {
+  batch.set(doc(collection(getDb(), 'roosterperiodes', periodeId, 'wijzigingslog')), {
+    soort,
+    tekst: tekst.slice(0, 200),
+    door: state.huidigeTrainerId,
+    op: serverTimestamp(),
+  })
+}
+
+function huidigeIndeling(periodeId: string, key: string): Indeling {
+  const p = state.roosterperiodes.find((x) => x.id === periodeId)
+  const i = p?.indeling[key]
+  if (!p || !i) throw new Error('Training niet gevonden in het rooster')
+  return i
+}
+
+/** Ik kan niet: mijn plek wordt een open plek die iedereen kan overnemen. */
+export async function geefPlekVrij(periodeId: string, key: string, omschrijving: string) {
+  const db = getDb()
+  const ik = state.huidigeTrainerId
+  const oud = huidigeIndeling(periodeId, key)
+  const batch = writeBatch(db)
+  batch.update(
+    doc(db, 'roosterperiodes', periodeId),
+    new FieldPath('indeling', key),
+    { ...oud, trainers: oud.trainers.filter((x) => x !== ik) },
+    'laatsteWijziging',
+    { soort: 'vrijgeven', key, door: ik, op: serverTimestamp() },
+  )
+  logRegel(batch, periodeId, 'vrijgeven', `${voornaamVan(ik)} kan niet op ${omschrijving}: plek vrijgegeven`)
+  await batch.commit()
+}
+
+/** Een open plek overnemen. */
+export async function neemPlekOver(periodeId: string, key: string, omschrijving: string) {
+  const db = getDb()
+  const ik = state.huidigeTrainerId
+  const oud = huidigeIndeling(periodeId, key)
+  const batch = writeBatch(db)
+  batch.update(
+    doc(db, 'roosterperiodes', periodeId),
+    new FieldPath('indeling', key),
+    { ...oud, trainers: [...oud.trainers, ik] },
+    'laatsteWijziging',
+    { soort: 'overnemen', key, door: ik, op: serverTimestamp() },
+  )
+  logRegel(batch, periodeId, 'overnemen', `${voornaamVan(ik)} neemt ${omschrijving} over`)
+  await batch.commit()
+}
+
+export async function vraagCollega(v: { periodeId: string; naar: string; vanKey: string; terugKey: string | null; bericht: string }) {
+  await setDoc(doc(collection(getDb(), 'ruilverzoeken')), {
+    ...v,
+    bericht: v.bericht.trim().slice(0, 300),
+    van: state.huidigeTrainerId,
+    status: 'open',
+    aangemaaktOp: serverTimestamp(),
+  })
+}
+
+export async function trekVerzoekIn(id: string) {
+  await updateDoc(doc(getDb(), 'ruilverzoeken', id), { status: 'ingetrokken', afgehandeldOp: serverTimestamp() })
+}
+
+export async function weigerVerzoek(id: string) {
+  await updateDoc(doc(getDb(), 'ruilverzoeken', id), { status: 'geweigerd', afgehandeldOp: serverTimestamp() })
+}
+
+/** Verzoek accepteren: rooster en verzoek worden in één keer bijgewerkt. */
+export async function accepteerVerzoek(v: Ruilverzoek, omschrijving: string) {
+  const db = getDb()
+  const ik = state.huidigeTrainerId
+  const a = huidigeIndeling(v.periodeId, v.vanKey)
+  const batch = writeBatch(db)
+  const velden: unknown[] = [
+    new FieldPath('indeling', v.vanKey),
+    { ...a, trainers: [...a.trainers.filter((x) => x !== v.van), ik] },
+  ]
+  if (v.terugKey) {
+    const b = huidigeIndeling(v.periodeId, v.terugKey)
+    velden.push(new FieldPath('indeling', v.terugKey), { ...b, trainers: [...b.trainers.filter((x) => x !== ik), v.van] })
+  }
+  velden.push('laatsteWijziging', {
+    soort: v.terugKey ? 'ruil' : 'overdracht',
+    key: v.vanKey,
+    verzoekId: v.id,
+    door: ik,
+    op: serverTimestamp(),
+  })
+  const [eerste, waarde, ...rest] = velden
+  batch.update(doc(db, 'roosterperiodes', v.periodeId), eerste as FieldPath, waarde, ...rest)
+  batch.update(doc(db, 'ruilverzoeken', v.id), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() })
+  logRegel(
+    batch,
+    v.periodeId,
+    v.terugKey ? 'ruil' : 'overdracht',
+    v.terugKey
+      ? `${voornaamVan(ik)} en ${voornaamVan(v.van)} ruilen: ${omschrijving}`
+      : `${voornaamVan(ik)} neemt ${omschrijving} over van ${voornaamVan(v.van)}`,
+  )
+  await batch.commit()
 }

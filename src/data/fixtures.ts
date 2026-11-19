@@ -1,3 +1,4 @@
+// Fix: fix-11 — ruilverzoeken en wijzigingslog in AppData
 // Fix: fix-5 — roosterperiodes en beschikbaarheid in AppData
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht)
 // Fix: fix-2 — testtrainers
@@ -6,6 +7,7 @@
 // standaard-jaarplan waarmee de app bij de eerste inrichting start.
 import { addDays } from '@/lib/dates'
 import type { Beschikbaarheid, Roosterperiode, Trainingsmoment } from './rooster'
+import type { LogRegel, Ruilverzoek } from './wijzigingen'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -393,6 +395,9 @@ export interface AppData {
   roosterperiodes: Roosterperiode[]
   /** periodeId → trainerId → beschikbaarheid */
   beschikbaarheid: Record<string, Record<string, Beschikbaarheid>>
+  ruilverzoeken: Ruilverzoek[]
+  /** Wijzigingen na publicatie, nieuwste eerst. */
+  wijzigingslog: LogRegel[]
   afwezigheden: Afwezigheid[]
   /** Handmatige wijzigingen bovenop de rotatie. `null` = open plek. */
   roosterWijzigingen: Record<string, string | null>

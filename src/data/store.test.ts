@@ -19,6 +19,8 @@ function data(over: Partial<AppData> = {}): AppData {
     trainingsmomenten: [],
     roosterperiodes: [],
     beschikbaarheid: {},
+    ruilverzoeken: [],
+    wijzigingslog: [],
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],

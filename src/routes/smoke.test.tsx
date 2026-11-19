@@ -29,6 +29,8 @@ const DATA: AppData = {
     },
   ],
   beschikbaarheid: { p1: { b: { trainerId: 'b', keuzes: { m1: 'graag' }, maxPerMaand: 2, nietKunnen: [] } } },
+  ruilverzoeken: [],
+  wijzigingslog: [],
   afwezigheden: [],
   roosterWijzigingen: {},
   trainingen: [

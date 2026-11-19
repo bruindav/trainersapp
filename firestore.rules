@@ -1,3 +1,4 @@
+// Fix: fix-11 — trainers: vrijgeven, overnemen, ruilen na publicatie; ruilverzoeken; wijzigingslog.
 // Fix: fix-10 — indeling en publicatie op roosterperiodes.
 // Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Fix: fix-3 — coördinator, taken (jaarplan, teambeheer, toezicht) en groep toezichthouders.
@@ -235,7 +236,8 @@ service cloud.firestore {
       allow create, update: if isCoordinator()
         && request.resource.data.keys().hasOnly([
              'naam', 'soort', 'van', 'tot', 'status', 'deadline', 'momentIds', 'losseTrainingen',
-             'vervallenData', 'versie', 'aangemaaktOp', 'indeling', 'gepubliceerdOp', 'gepubliceerdDoor'])
+             'vervallenData', 'versie', 'aangemaaktOp', 'indeling', 'gepubliceerdOp', 'gepubliceerdDoor',
+             'laatsteWijziging'])
         && (!('indeling' in request.resource.data)
             || (request.resource.data.indeling is map && request.resource.data.indeling.size() <= 500))
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
@@ -248,6 +250,79 @@ service cloud.firestore {
         && request.resource.data.losseTrainingen is list && request.resource.data.losseTrainingen.size() <= 100
         && request.resource.data.vervallenData is list && request.resource.data.vervallenData.size() <= 200;
       allow delete: if isCoordinator() && resource.data.status == 'concept';
+
+      // Na publicatie mogen trainers zelf hun plek vrijgeven, een open plek
+      // overnemen of (via een geaccepteerd verzoek) ruilen. Elke wijziging
+      // raakt alleen de genoemde training(en) en wordt exact gecontroleerd.
+      allow update: if isTrainer()
+        && ikData().rol != 'Geen training'
+        && resource.data.status == 'gepubliceerd'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['indeling', 'laatsteWijziging'])
+        && request.resource.data.laatsteWijziging.door == request.auth.uid
+        && request.resource.data.laatsteWijziging.op == request.time
+        && (vrijgeven() || overnemen() || verzoekUitvoeren(request.resource.data.laatsteWijziging));
+
+      function oudI(key) { return resource.data.indeling[key]; }
+      function nieuwI(key) { return request.resource.data.indeling[key]; }
+      function alleenKeys(keys) {
+        return request.resource.data.indeling.diff(resource.data.indeling).affectedKeys().hasOnly(keys);
+      }
+      function alleenTrainersAnders(key) {
+        return nieuwI(key).diff(oudI(key)).affectedKeys().hasOnly(['trainers']);
+      }
+      function vrijgeven() {
+        let w = request.resource.data.laatsteWijziging;
+        return w.soort == 'vrijgeven'
+          && alleenKeys([w.key]) && alleenTrainersAnders(w.key)
+          && request.auth.uid in oudI(w.key).trainers
+          && nieuwI(w.key).trainers == oudI(w.key).trainers.removeAll([request.auth.uid]);
+      }
+      function bezet(i) {
+        return i.trainers.size() + (i.get('extern', '') == '' ? 0 : 1);
+      }
+      function overnemen() {
+        let w = request.resource.data.laatsteWijziging;
+        return w.soort == 'overnemen'
+          && alleenKeys([w.key]) && alleenTrainersAnders(w.key)
+          && !(request.auth.uid in oudI(w.key).trainers)
+          && oudI(w.key).get('zelf', false) == false
+          && bezet(oudI(w.key)) < oudI(w.key).nodig
+          && nieuwI(w.key).trainers == oudI(w.key).trainers.concat([request.auth.uid]);
+      }
+      function verzoekPad(id) {
+        return /databases/$(database)/documents/ruilverzoeken/$(id);
+      }
+      // Wissel op één training: 'weg' gaat eruit, 'erbij' komt erin.
+      function wissel(key, weg, erbij) {
+        return weg in oudI(key).trainers
+          && !(erbij in oudI(key).trainers)
+          && alleenTrainersAnders(key)
+          && nieuwI(key).trainers == oudI(key).trainers.removeAll([weg]).concat([erbij]);
+      }
+      function verzoekUitvoeren(w) {
+        let oud = get(verzoekPad(w.verzoekId)).data;
+        let na = getAfter(verzoekPad(w.verzoekId)).data;
+        return w.soort in ['ruil', 'overdracht']
+          && oud.status == 'open' && na.status == 'geaccepteerd'
+          && oud.periodeId == pid
+          && oud.naar == request.auth.uid
+          && w.key == oud.vanKey
+          && wissel(oud.vanKey, oud.van, request.auth.uid)
+          && ((w.soort == 'overdracht' && oud.terugKey == null && alleenKeys([oud.vanKey]))
+              || (w.soort == 'ruil' && oud.terugKey != null && alleenKeys([oud.vanKey, oud.terugKey])
+                  && wissel(oud.terugKey, request.auth.uid, oud.van)));
+      }
+
+      match /wijzigingslog/{id} {
+        allow read: if isTrainer();
+        allow create: if isTrainer()
+          && request.resource.data.keys().hasOnly(['soort', 'tekst', 'door', 'op'])
+          && request.resource.data.soort in ['vrijgeven', 'overnemen', 'ruil', 'overdracht', 'indeling']
+          && tekst(request.resource.data.tekst, 200)
+          && request.resource.data.door == request.auth.uid
+          && request.resource.data.op == request.time;
+        allow delete: if isCoordinator();
+      }
 
       // Iedereen ziet ieders beschikbaarheid (besluit 19 nov). Een trainer vult
       // alleen de eigen in, zolang de periode beschikbaarheid opvraagt; de
@@ -268,6 +343,37 @@ service cloud.firestore {
               || (uid == request.auth.uid && get(periodePad(pid)).data.status == 'beschikbaarheid'));
         allow delete: if isCoordinator();
       }
+    }
+
+    // --- Ruilverzoeken (fix-11) ------------------------------------------------
+
+    match /ruilverzoeken/{id} {
+      allow read: if isTrainer();
+      allow create: if isTrainer()
+        && request.resource.data.keys().hasOnly(['periodeId', 'van', 'naar', 'vanKey', 'terugKey', 'status', 'bericht', 'aangemaaktOp'])
+        && request.resource.data.van == request.auth.uid
+        && request.resource.data.naar != request.auth.uid
+        && exists(trainerPad(request.resource.data.naar))
+        && request.resource.data.status == 'open'
+        && tekst(request.resource.data.vanKey, 80)
+        && (request.resource.data.terugKey == null || tekst(request.resource.data.terugKey, 80))
+        && tekst(request.resource.data.bericht, 300)
+        && request.resource.data.aangemaaktOp == request.time;
+      // Alleen de status verandert: de gevraagde collega weigert of accepteert
+      // (accepteren alleen samen met de roosterwijziging), de aanvrager trekt in.
+      allow update: if isTrainer()
+        && resource.data.status == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'afgehandeldOp'])
+        && request.resource.data.afgehandeldOp == request.time
+        && ((request.auth.uid == resource.data.naar && request.resource.data.status == 'geweigerd')
+            || (request.auth.uid == resource.data.van && request.resource.data.status == 'ingetrokken')
+            || (request.auth.uid == resource.data.naar && request.resource.data.status == 'geaccepteerd'
+                && getAfter(/databases/$(database)/documents/roosterperiodes/$(resource.data.periodeId)).data.laatsteWijziging.verzoekId == id));
+      allow delete: if isCoordinator();
+    }
+
+    match /{pad=**}/wijzigingslog/{id} {
+      allow read: if isTrainer();
     }
 
     // Collection-group-query op alle beschikbaarheid (voor overzichten).
