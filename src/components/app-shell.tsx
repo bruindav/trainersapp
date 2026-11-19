@@ -1,10 +1,11 @@
+// Fix: fix-20 — Help in het menu; footer met help/privacy/disclaimer en digidave + fix-nummer
 // Fix: fix-16 — feedbackknop op elk scherm; menu-item Feedback voor de coördinator
 // Fix: fix-11 — open-plek-balk onder de kop
 // Fix: fix-5 — navigatie-item Periodes
 // Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
-import { CalendarCheck, CalendarRange, ClipboardList, Inbox, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
+import { CalendarCheck, CalendarRange, CircleHelp, ClipboardList, Inbox, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ReactNode } from 'react'
 
@@ -23,6 +24,7 @@ import { logUit } from '@/data/auth'
 import { trainerById, useAppData } from '@/data/store'
 import { rolLabel } from '@/data/fixtures'
 import { FeedbackKnop } from './feedback-knop'
+import { GemaaktDoor, InfoLinks } from './info-pagina'
 import { OpenPlekBalk } from './rooster-acties'
 import { TrainerAvatar } from './trainer-avatar'
 
@@ -89,6 +91,11 @@ function AccountMenu() {
             <Users aria-hidden /> Team
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/help">
+            <CircleHelp aria-hidden /> Help
+          </Link>
+        </DropdownMenuItem>
         {ik.coordinator && (
           <DropdownMenuItem asChild>
             <Link to="/feedback">
@@ -117,6 +124,13 @@ function MobielAccount() {
           {ik.email && <span className="block truncate text-xs text-muted-foreground">{ik.email}</span>}
         </span>
       </div>
+      <SheetClose asChild>
+        <Button asChild variant="ghost" className="h-11 w-full justify-start">
+          <Link to="/help">
+            <CircleHelp aria-hidden /> Help
+          </Link>
+        </Button>
+      </SheetClose>
       {ik.coordinator && (
         <SheetClose asChild>
           <Button asChild variant="ghost" className="h-11 w-full justify-start">
@@ -194,10 +208,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="mt-16 bg-nat-ink text-white/80">
         <div className="nat-rainbow h-1" aria-hidden />
         <div className="mx-auto flex max-w-content flex-col gap-2 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>
-            <span className="font-bold text-white">Nat Utrecht</span> · trainersomgeving · zwembad De Kwakel
-          </p>
-          <p className="text-white/60">Alleen voor trainers van de vereniging</p>
+          <div className="space-y-1.5">
+            <p>
+              <span className="font-bold text-white">Nat Utrecht</span> · trainersomgeving · zwembad De Kwakel
+            </p>
+            <InfoLinks className="text-white/80" />
+          </div>
+          <GemaaktDoor className="text-white/70" />
         </div>
       </footer>
     </div>

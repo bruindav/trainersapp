@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-20 — help, privacy, disclaimer, digidave, versie, iOS -->
 <!-- Fix: fix-19 — alleen Google-inlog; uitnodigingsmail via EmailJS -->
 <!-- Fix: fix-18 — uitnodigen: mail vanuit eigen mailprogramma; inloglink optioneel -->
 <!-- Fix: fix-16 — feedback -->
@@ -56,6 +57,7 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
 │   │   ├── rooster-onderdelen.tsx # Status badge/steps, who-can-when grid, reminder banner
 │   │   ├── rooster-acties.tsx     # Red open-slot bar (all pages), "Ik kan niet" dialog (release / ask a colleague)
+│   │   ├── info-pagina.tsx   # InfoPagina layout, InfoLinks, GemaaktDoor (digidave logo + version), OpenbareLayout
 │   │   ├── feedback-knop.tsx # Floating feedback button on every screen: screenshot (modern-screenshot) + text
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
@@ -82,6 +84,7 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── periodes.$periodeId.tsx # One period: status flow, settings (incl. holidays), call-to-action, who-can-when grid
 │   │   ├── periodes.$periodeId_.beschikbaarheid.tsx # Focused 3-step availability form (?trainer= for the coordinator)
 │   │   ├── periodes.$periodeId_.indelen.tsx # Scheduling (coordinator): proposal, warnings, per-training dialog, publish; read-only roster for all once published
+│   │   ├── help.tsx / privacy.tsx / disclaimer.tsx # Info pages (also readable when logged out, via OpenbareLayout)
 │   │   ├── feedback.tsx      # Coordinator: read feedback with screenshots, mark handled, delete
 │   │   └── team.tsx          # Team: roles + tasks, invites, supervisors group, test trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
@@ -199,6 +202,8 @@ pnpm preview       # Preview the production build
 - **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
 - **Invites & login** (fix-19): login is Google only (the free plan allows just 5 email-link mails/day). Inviting creates `uitnodigingen/{email}` and immediately sends an invitation mail via **EmailJS** (`src/lib/mail.ts`, same service/public key as HornetApp and VvE e-learning, the generic template with `email`, `to_name`, `email_subject`, `email_body`); fallback is a mailto from the coordinator's own mail client. EmailJS free = 200 mails/month shared by all projects.
 - **Login** uses Google, which proves ownership of the address (`email_verified`); invites are matched on that verified address. (Code to finish an old email link still exists in `auth.ts`.)
+- **Version** (fix-20): `src/versie.ts` exposes `VERSIE`, filled at build time by `vite.config.ts` from the last commit subject (`fix-N: …`), shown in the footer and on the info pages. So every fix commit must start with `fix-N:`.
+- **iOS** (fix-20): build target includes Safari 15; `apple-touch-icon.png` for the home screen; Google login uses a popup (redirect breaks on Safari); Google blocks login inside in-app browsers, the error tells users to open Safari.
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.
 

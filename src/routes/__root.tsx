@@ -1,12 +1,14 @@
+// Fix: fix-20 — help, privacy en disclaimer ook zonder inloggen
 // Fix: fix-3 — uitnodigingen laden voor wie het team beheert
 // Fix: fix-1 — SPA-root: inloggen via Firebase en data uit Firestore
-import { Outlet, createRootRoute } from '@tanstack/react-router'
+import { Outlet, createRootRoute, useLocation } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NotFoundPage } from '@/components/error-pages'
 import { AppShell } from '@/components/app-shell'
+import { OpenbareLayout } from '@/components/info-pagina'
 import { AuthSchermen, LaadScherm, SyncFoutScherm } from '@/components/auth-schermen'
 import { startAuth, useAuthStatus } from '@/data/auth'
 import { startSync, useSyncStatus } from '@/data/store'
@@ -30,8 +32,11 @@ function RootLayout() {
   )
 }
 
+const OPENBAAR = new Set(['/help', '/privacy', '/disclaimer'])
+
 function AuthGate() {
   const auth = useAuthStatus()
+  const pad = useLocation({ select: (l) => l.pathname })
   const uid = auth.soort === 'ingelogd' ? auth.trainer.id : null
   const magTeam = auth.soort === 'ingelogd' && magTeamBeheren(auth.trainer)
 
@@ -40,7 +45,17 @@ function AuthGate() {
     return startSync(uid, magTeam)
   }, [uid, magTeam])
 
-  if (auth.soort !== 'ingelogd') return <AuthSchermen status={auth} />
+  if (auth.soort !== 'ingelogd') {
+    // Help, privacy en disclaimer zijn ook zonder inloggen te lezen.
+    if (OPENBAAR.has(pad)) {
+      return (
+        <OpenbareLayout>
+          <Outlet />
+        </OpenbareLayout>
+      )
+    }
+    return <AuthSchermen status={auth} />
+  }
   return <IngelogdeApp />
 }
 

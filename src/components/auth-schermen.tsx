@@ -1,3 +1,4 @@
+// Fix: fix-20 — help/privacy/disclaimer en digidave onder het inlogscherm
 // Fix: fix-19 — alleen inloggen met Google (geen inloglinks meer: max 5 per dag)
 // Fix: fix-3 — eerste inrichting door de coördinator
 // Fix: fix-1 — schermen rond inloggen (ontwerp: UI-agent)
@@ -10,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { GemaaktDoor, InfoLinks } from '@/components/info-pagina'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -43,6 +45,10 @@ function AuthLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
         <Card className="w-full max-w-sm">{children}</Card>
+        <div className="flex flex-col items-center gap-3 text-sm text-white/70">
+          <InfoLinks gewoneLinks />
+          <GemaaktDoor />
+        </div>
       </div>
     </div>
   )
@@ -85,7 +91,10 @@ function Inloggen() {
         setFout('Je browser blokkeerde het Google-venster. Sta pop-ups toe voor deze site en probeer het opnieuw.')
         return
       }
-      setFout('Inloggen met Google lukte niet. Probeer het opnieuw.')
+      // Ingebouwde browsers van apps (Gmail, WhatsApp, Facebook) blokkeert Google vaak.
+      setFout(
+        'Inloggen met Google lukte niet. Opende je de app vanuit een andere app, zoals je mail of WhatsApp? Open hem dan in Safari of Chrome en probeer het opnieuw.',
+      )
     } finally {
       setBezig(false)
     }

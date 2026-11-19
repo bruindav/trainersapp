@@ -1,3 +1,4 @@
+// Fix: fix-20 — help, privacy, disclaimer
 // Fix: fix-16 — feedbackpagina
 // Fix: fix-11 — Mijn rooster, open-plek-balk en verzoeken
 // Fix: fix-10 — pagina indelen
@@ -98,6 +99,9 @@ const PAGINAS: [string, RegExp][] = [
   ['/', /Anna/],
   ['/rooster', /^Mijn rooster$/],
   ['/feedback', /^Feedback$/],
+  ['/help', /^Hoe werkt de Trainersapp\?$/],
+  ['/privacy', /^Privacyverklaring$/],
+  ['/disclaimer', /^Disclaimer$/],
   ['/jaarplan', /Jaarplan|Seizoen/],
   ['/trainingen', /getraind/],
   ['/team', /^Team$/],
