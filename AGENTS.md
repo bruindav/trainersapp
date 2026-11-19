@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-19 — alleen Google-inlog; uitnodigingsmail via EmailJS -->
 <!-- Fix: fix-18 — uitnodigen: mail vanuit eigen mailprogramma; inloglink optioneel -->
 <!-- Fix: fix-16 — feedback -->
 <!-- Fix: fix-15 — ritme voor vaste trainers -->
@@ -196,8 +197,8 @@ pnpm preview       # Preview the production build
 - **Vaste trainers** (fix-12): a moment can have fixed trainers (e.g. Sunday 11:00). In the availability form they don't choose for that moment (stored as `graag`); others only choose "Ik kan invallen" (stored as `kan`) or "Nee". `maakVoorstel` places available fixed trainers first (ignoring their monthly max) and fills only the remaining slots. A moment can be limited to a date range (`geldigVan`/`geldigTot`, e.g. a trial Jan–Apr); outside it no trainings are generated and periods that never overlap don't ask for it. With more fixed trainers than places (fix-15) they alternate in blocks of `ritmeWeken` trainings (default 2); if one can't, another fixed trainer takes it and the rhythm continues. For fixed trainers only their `nietKunnen` dates count — an old choice for that moment is ignored.
 - **Toezicht**: every training needs a supervisor — a qualified trainer or someone from `toezichthouders`, also when swimmers train without a trainer.
 - **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
-- **Invites** (fix-18): inviting only creates `uitnodigingen/{email}`. The coordinator then opens a ready-made mail in their own mail client (mailto). Optionally the app sends a Firebase sign-in link (`stuurUitnodigingsMail`, `?uitgenodigd=` prefills the address) — but the free Spark plan allows only **5 email-link sign-in emails per day for the whole project**, shared with normal logins, so Google login is the recommended route.
-- **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.
+- **Invites & login** (fix-19): login is Google only (the free plan allows just 5 email-link mails/day). Inviting creates `uitnodigingen/{email}` and immediately sends an invitation mail via **EmailJS** (`src/lib/mail.ts`, same service/public key as HornetApp and VvE e-learning, the generic template with `email`, `to_name`, `email_subject`, `email_body`); fallback is a mailto from the coordinator's own mail client. EmailJS free = 200 mails/month shared by all projects.
+- **Login** uses Google, which proves ownership of the address (`email_verified`); invites are matched on that verified address. (Code to finish an old email link still exists in `auth.ts`.)
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.
 

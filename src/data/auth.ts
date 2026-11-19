@@ -1,3 +1,4 @@
+// Fix: fix-19 — geen uitnodigingslink meer via Firebase (EmailJS + Google-inlog)
 // Fix: fix-18 — uitnodigingsmail met inloglink; mails in het Nederlands
 /**
  * Fix: fix-3 — coördinator i.p.v. hoofdtrainer; taken bij uitnodiging; migratie oude rol.
@@ -227,20 +228,6 @@ export async function stuurInlogLink(email: string) {
   } catch {
     // Geen opslag beschikbaar: de gebruiker vult het adres na het klikken opnieuw in.
   }
-}
-
-/**
- * Stuurt een uitgenodigd teamlid een mail met een inloglink (via Firebase,
- * dezelfde mail als bij gewoon inloggen). Het adres komt niet in de opslag
- * van dit apparaat: het is het apparaat van de coördinator.
- */
-export async function stuurUitnodigingsMail(email: string) {
-  const auth = getFirebaseAuth()
-  auth.languageCode = 'nl'
-  await sendSignInLinkToEmail(auth, email, {
-    url: `${window.location.origin}/?uitgenodigd=${encodeURIComponent(email)}`,
-    handleCodeInApp: true,
-  })
 }
 
 /** Rondt het inloggen af nadat de gebruiker op de link in de mail heeft geklikt. */

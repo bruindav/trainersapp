@@ -1,3 +1,4 @@
+// Fix: fix-19 — uitnodigingsmail via EmailJS; inloggen met Google
 // Fix: fix-18 — uitnodiging mailen (inloglink), opnieuw mailen of zelf mailen
 // Fix: fix-17 — naam van een teamlid wijzigen
 // Fix: fix-4 — rol direct in het menu (submenu viel op mobiel buiten beeld)
@@ -5,8 +6,8 @@
 // Fix: fix-2 — testtrainers toevoegen en verwijderen
 // Fix: fix-1 — Team: trainers bekijken; hoofdtrainer nodigt uit en beheert rollen
 import { createFileRoute } from '@tanstack/react-router'
-import { FlaskConical, Mail, MoreHorizontal, Send, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { Check, FlaskConical, Loader2, Mail, MoreHorizontal, Send, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -52,7 +53,7 @@ import {
   type TrainerRol,
   type Uitnodiging,
 } from '@/data/fixtures'
-import { stuurUitnodigingsMail } from '@/data/auth'
+import { stuurMail } from '@/lib/mail'
 import {
   initialenVan,
   nodigTrainerUit,
@@ -198,26 +199,25 @@ function TeamPagina() {
                         </p>
                       </div>
                       <span className="flex flex-wrap gap-1">
-                        <Button asChild variant="outline" size="sm">
-                          <a href={uitnodigingMailto(u)}>
-                            <Mail aria-hidden /> Mail sturen
-                          </a>
-                        </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          title="Telt mee voor het maximum van 5 inlogmails per dag"
                           onClick={() =>
-                            stuurUitnodigingsMail(u.email).then(
-                              () => toast.success(`Inloglink gestuurd naar ${u.email}`),
+                            mailUitnodiging(u).then(
+                              () => toast.success(`Uitnodiging opnieuw gemaild naar ${u.email}`),
                               (err) => {
                                 console.error(err)
-                                toast.error('Versturen lukte niet (misschien is het dagmaximum bereikt). Gebruik "Mail sturen".')
+                                toast.error('Versturen lukte niet. Gebruik "Zelf mailen".')
                               },
                             )
                           }
                         >
-                          <Send aria-hidden /> Inloglink sturen
+                          <Send aria-hidden /> Opnieuw mailen
+                        </Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <a href={uitnodigingMailto(u)}>
+                            <Mail aria-hidden /> Zelf mailen
+                          </a>
                         </Button>
                         {(ik.coordinator || !u.coordinator) && (
                           <Button variant="ghost" size="sm" onClick={() => setInTeTrekken(u)}>
@@ -516,75 +516,88 @@ function ToezichthoudersKaart({ magBeheren }: { magBeheren: boolean }) {
   )
 }
 
-/**
- * Na het uitnodigen: de mail versturen. Standaard vanuit je eigen
- * mailprogramma; de app kan ook een inloglink sturen, maar Firebase staat
- * gratis maar 5 van die mails per dag toe (voor alle inlogmails samen).
- */
+/** Tekst van de uitnodigingsmail (zelfde tekst via EmailJS of je eigen mailprogramma). */
+function uitnodigingTekst(u: { naam: string; email: string }) {
+  const adres = window.location.origin
+  return {
+    onderwerp: 'Uitnodiging Trainersapp Nat Utrecht',
+    tekst: [
+      `Hoi ${voornaam(u.naam)},`,
+      '',
+      'Je bent uitgenodigd voor de Trainersapp van Nat Utrecht: het rooster, je beschikbaarheid en het trainingslogboek op één plek.',
+      '',
+      `Ga naar ${adres} en kies "Inloggen met Google", met het Google-account van dit e-mailadres (${u.email}).`,
+      '',
+      'Geen Gmail? Je kunt gratis een Google-account maken met je eigen e-mailadres via https://accounts.google.com/signup (kies "Mijn huidige e-mailadres gebruiken").',
+      '',
+      'Groet,',
+    ].join('\n'),
+  }
+}
+
+async function mailUitnodiging(u: { naam: string; email: string }) {
+  const { onderwerp, tekst } = uitnodigingTekst(u)
+  await stuurMail({ aan: u.email, naam: u.naam, onderwerp, tekst })
+}
+
+/** Dezelfde mail vanuit je eigen mailprogramma (als EmailJS niet lukt). */
+function uitnodigingMailto(u: { naam: string; email: string }) {
+  const { onderwerp, tekst } = uitnodigingTekst(u)
+  return `mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent(onderwerp)}&body=${encodeURIComponent(tekst)}`
+}
+
+/** Na het uitnodigen: de mail gaat meteen via EmailJS; lukt dat niet, dan via je eigen mail. */
 function UitnodigingVersturen({ u, onKlaar }: { u: { naam: string; email: string }; onKlaar: () => void }) {
-  const [bezig, setBezig] = useState(false)
+  const [status, setStatus] = useState<'bezig' | 'verstuurd' | 'mislukt'>('bezig')
+  useEffect(() => {
+    let actueel = true
+    mailUitnodiging(u).then(
+      () => actueel && setStatus('verstuurd'),
+      (err) => {
+        console.error('Uitnodigingsmail mislukt', err)
+        if (actueel) setStatus('mislukt')
+      },
+    )
+    return () => {
+      actueel = false
+    }
+  }, [u])
+
   return (
     <div className="space-y-4">
       <DialogHeader>
         <DialogTitle>Uitnodiging klaargezet</DialogTitle>
         <DialogDescription>
-          {voornaam(u.naam)} kan nu inloggen met {u.email}. Laat het {voornaam(u.naam)} weten met een mail.
+          {voornaam(u.naam)} kan nu inloggen met het Google-account van {u.email}.
         </DialogDescription>
       </DialogHeader>
-      <Button asChild size="lg" className="w-full">
-        <a href={uitnodigingMailto(u)} onClick={() => setTimeout(onKlaar, 300)}>
-          <Mail aria-hidden /> Mail openen in je mailprogramma
-        </a>
-      </Button>
-      <div className="space-y-1.5 rounded-lg bg-muted p-3 text-sm">
-        <p>
-          Of laat de app een inloglink sturen. Let op: dat kan hoogstens 5 keer per dag voor alle inlogmails samen, en de
-          mail komt van een onbekend adres (kijk ook in de spammap).
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={bezig}
-          onClick={async () => {
-            setBezig(true)
-            try {
-              await stuurUitnodigingsMail(u.email)
-              toast.success(`Inloglink gestuurd naar ${u.email}`)
-              onKlaar()
-            } catch (err) {
-              console.error(err)
-              toast.error('Versturen lukte niet (misschien is het dagmaximum bereikt). Gebruik je eigen mail.')
-            } finally {
-              setBezig(false)
-            }
-          }}
-        >
-          <Send aria-hidden /> Inloglink laten sturen
+      <p role="status" className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm">
+        {status === 'bezig' && (
+          <>
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden /> Uitnodigingsmail versturen…
+          </>
+        )}
+        {status === 'verstuurd' && (
+          <>
+            <Check className="size-4 text-nat-green" aria-hidden /> Uitnodigingsmail verstuurd naar {u.email}.
+          </>
+        )}
+        {status === 'mislukt' && <>De mail kon niet automatisch worden verstuurd. Stuur hem vanuit je eigen mail.</>}
+      </p>
+      {status === 'mislukt' && (
+        <Button asChild size="lg" className="w-full">
+          <a href={uitnodigingMailto(u)} onClick={() => setTimeout(onKlaar, 300)}>
+            <Mail aria-hidden /> Mail openen in je mailprogramma
+          </a>
         </Button>
-      </div>
+      )}
       <DialogFooter>
-        <Button variant="ghost" onClick={onKlaar}>
+        <Button variant={status === 'verstuurd' ? 'default' : 'ghost'} onClick={onKlaar}>
           Sluiten
         </Button>
       </DialogFooter>
     </div>
   )
-}
-
-/** Een kant-en-klare mail vanuit je eigen mailprogramma. */
-function uitnodigingMailto(u: { naam: string; email: string }) {
-  const adres = window.location.origin
-  const tekst = [
-    `Hoi ${voornaam(u.naam)},`,
-    '',
-    'Je bent uitgenodigd voor de Trainersapp van Nat Utrecht: het rooster, je beschikbaarheid en het trainingslogboek op één plek.',
-    '',
-    `Ga naar ${adres} en log in met dit e-mailadres (${u.email}).`,
-    'Is dit een Gmail- of Google-adres? Kies dan "Inloggen met Google", dat is het snelst. Anders vul je je e-mailadres in en krijg je een inloglink in je mail (kijk eventueel in de spammap).',
-    '',
-    'Groet,',
-  ].join('\n')
-  return `mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent('Uitnodiging Trainersapp Nat Utrecht')}&body=${encodeURIComponent(tekst)}`
 }
 
 /** Oude namen van testtrainers → nieuwe namen (wens van 19 nov 2026). */
@@ -769,8 +782,7 @@ function UitnodigenDialog({
         <DialogHeader>
           <DialogTitle>Teamlid uitnodigen</DialogTitle>
           <DialogDescription>
-            Alleen dit e-mailadres kan straks inloggen. Daarna stuur je je collega een uitnodigingsmail vanuit je eigen
-            mailprogramma.
+            Alleen dit e-mailadres kan straks inloggen (met Google). Je collega krijgt meteen een uitnodigingsmail.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={verstuur} noValidate className="space-y-4">

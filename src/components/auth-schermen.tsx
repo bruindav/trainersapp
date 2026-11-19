@@ -1,7 +1,8 @@
+// Fix: fix-19 — alleen inloggen met Google (geen inloglinks meer: max 5 per dag)
 // Fix: fix-3 — eerste inrichting door de coördinator
 // Fix: fix-1 — schermen rond inloggen (ontwerp: UI-agent)
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Loader2, Mail, RefreshCw, ShieldX } from 'lucide-react'
+import { Loader2, RefreshCw, ShieldX } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 import { toast } from 'sonner'
 
@@ -11,7 +12,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   annuleerLinkBevestigen,
@@ -19,7 +19,6 @@ import {
   logUit,
   richAppIn,
   rondEmailLinkAf,
-  stuurInlogLink,
   type AuthStatus,
 } from '@/data/auth'
 
@@ -71,67 +70,25 @@ export function AuthSchermen({ status }: { status: Exclude<AuthStatus, { soort: 
 // --- 1. Inloggen --------------------------------------------------------------
 
 function Inloggen() {
-  const [email, setEmail] = useState('')
-  const [veldFout, setVeldFout] = useState('')
   const [fout, setFout] = useState('')
   const [bezig, setBezig] = useState(false)
-  const [verstuurdNaar, setVerstuurdNaar] = useState<string | null>(null)
-
-  async function verstuur(e: FormEvent) {
-    e.preventDefault()
-    setFout('')
-    const adres = email.trim()
-    if (!EMAIL_PATROON.test(adres)) {
-      setVeldFout('Vul een geldig e-mailadres in.')
-      return
-    }
-    setVeldFout('')
-    setBezig(true)
-    try {
-      await stuurInlogLink(adres)
-      setVerstuurdNaar(adres)
-    } catch {
-      setFout('Versturen lukte niet. Controleer je verbinding en probeer het opnieuw.')
-    } finally {
-      setBezig(false)
-    }
-  }
 
   async function google() {
     setFout('')
+    setBezig(true)
     try {
       await logInMetGoogle()
     } catch (err) {
       const code = foutCode(err)
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return
       if (code === 'auth/popup-blocked') {
-        setFout('Je browser blokkeerde het Google-venster. Sta pop-ups toe of gebruik de inloglink.')
+        setFout('Je browser blokkeerde het Google-venster. Sta pop-ups toe voor deze site en probeer het opnieuw.')
         return
       }
       setFout('Inloggen met Google lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
     }
-  }
-
-  if (verstuurdNaar) {
-    return (
-      <AuthLayout>
-        <CardHeader className="items-center text-center">
-          <Mail className="mx-auto size-10 text-primary" aria-hidden />
-          <CardTitle>
-            <h1 className="text-xl font-bold">Check je mail</h1>
-          </CardTitle>
-          <CardDescription>
-            We hebben een inloglink gestuurd naar <strong className="text-foreground">{verstuurdNaar}</strong>. Open
-            de link op dit apparaat. Geen mail gezien? Kijk ook in je spam.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="ghost" className="w-full" onClick={() => setVerstuurdNaar(null)}>
-            Ander e-mailadres gebruiken
-          </Button>
-        </CardContent>
-      </AuthLayout>
-    )
   }
 
   return (
@@ -141,7 +98,9 @@ function Inloggen() {
         <CardTitle>
           <h1 className="text-xl font-bold">Inloggen bij de Trainersapp</h1>
         </CardTitle>
-        <CardDescription>Je krijgt een inloglink per mail. Een wachtwoord heb je niet nodig.</CardDescription>
+        <CardDescription>
+          Log in met het Google-account van het e-mailadres waarop je bent uitgenodigd.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {fout && (
@@ -149,45 +108,22 @@ function Inloggen() {
             <AlertDescription>{fout}</AlertDescription>
           </Alert>
         )}
-        <form onSubmit={verstuur} noValidate className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="inlog-email">E-mailadres</Label>
-            <Input
-              id="inlog-email"
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              placeholder="naam@voorbeeld.nl"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              aria-invalid={!!veldFout}
-              aria-describedby={veldFout ? 'inlog-email-fout' : undefined}
-              className="h-11"
-            />
-            {veldFout && (
-              <p id="inlog-email-fout" className="text-sm text-destructive">
-                {veldFout}
-              </p>
-            )}
-          </div>
-          <Button type="submit" size="lg" className="h-11 w-full rounded-full" disabled={bezig}>
-            {bezig ? (
-              <>
-                <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> Link versturen…
-              </>
-            ) : (
-              'Stuur mij een inloglink'
-            )}
-          </Button>
-        </form>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <Separator className="flex-1" />
-          of
-          <Separator className="flex-1" />
-        </div>
-        <Button variant="outline" size="lg" className="h-11 w-full rounded-full" onClick={google}>
-          <GoogleLogo /> Inloggen met Google
+        <Button size="lg" className="h-11 w-full rounded-full" onClick={google} disabled={bezig}>
+          {bezig ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <GoogleLogo />} Inloggen met
+          Google
         </Button>
+        <p className="text-sm text-muted-foreground">
+          Geen Gmail? Je kunt gratis een Google-account maken met je eigen e-mailadres:{' '}
+          <a
+            href="https://accounts.google.com/signup/v2/webcreateaccount?flowName=GlifWebSignIn&flowEntry=SignUp&useEmail=true"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-primary underline underline-offset-2"
+          >
+            Google-account maken
+          </a>
+          .
+        </p>
         <p className="text-center text-sm text-muted-foreground">
           Nog geen toegang? Vraag de coördinator om een uitnodiging.
         </p>
