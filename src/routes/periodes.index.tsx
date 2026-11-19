@@ -1,7 +1,8 @@
+// Fix: fix-12 — per moment vaste trainers en een geldigheidsperiode instellen
 // Fix: fix-9 — trainingsmomenten inklapbaar
 // Fix: fix-5 — roosterperiodes en vaste trainingsmomenten
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { CalendarPlus, ChevronRight, Clock, Plus, Trash2 } from 'lucide-react'
+import { CalendarPlus, ChevronRight, Clock, Lock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -27,11 +29,13 @@ import { geeftTraining } from '@/data/fixtures'
 import {
   DAGEN,
   STANDAARD_LOCATIE,
+  geldigheidTekst,
   isVolledigIngevuld,
   keuzeKolommen,
   momentNaam,
   trainingenInPeriode,
   type PeriodeSoort,
+  type Trainingsmoment,
 } from '@/data/rooster'
 import {
   bewaarMoment,
@@ -136,6 +140,7 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
   const [eind, setEind] = useState('22:00')
   const [locatie, setLocatie] = useState(STANDAARD_LOCATIE)
   const [bezig, setBezig] = useState(false)
+  const [wijzig, setWijzig] = useState<Trainingsmoment | null>(null)
 
   async function uitvoeren(actie: () => Promise<void>, melding: string) {
     setBezig(true)
@@ -201,7 +206,16 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
                     {momentNaam(m)}
                     {!m.actief && <span className="ml-2 text-sm font-normal text-muted-foreground">(niet actief)</span>}
                   </p>
-                  <p className="text-sm text-muted-foreground">{m.locatie}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {m.locatie}
+                    {geldigheidTekst(m) && <> · alleen {geldigheidTekst(m)}</>}
+                  </p>
+                  {m.vasteTrainers?.length ? (
+                    <p className="flex items-center gap-1 text-sm">
+                      <Lock className="size-3.5 text-nat-green" aria-hidden />
+                      Vast: {m.vasteTrainers.map((id) => trainerById(id)?.naam ?? 'Oud-trainer').join(', ')}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm" id={`nodig-${m.id}`}>
@@ -225,6 +239,18 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
                       </Button>
                     ))}
                   </div>
+                  {magBewerken && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-11"
+                      aria-label={`${momentNaam(m)} wijzigen`}
+                      disabled={bezig}
+                      onClick={() => setWijzig(m)}
+                    >
+                      <Pencil aria-hidden />
+                    </Button>
+                  )}
                   {magBewerken && (
                     <Button
                       variant="ghost"
@@ -277,7 +303,98 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
           </form>
         )}
       </div>
+      {wijzig && <MomentDialog moment={wijzig} onClose={() => setWijzig(null)} />}
     </InklapbareKaart>
+  )
+}
+
+function MomentDialog({ moment: m, onClose }: { moment: Trainingsmoment; onClose: () => void }) {
+  const data = useAppData()
+  const [vast, setVast] = useState<string[]>(m.vasteTrainers ?? [])
+  const [van, setVan] = useState(m.geldigVan ?? '')
+  const [tot, setTot] = useState(m.geldigTot ?? '')
+  const [bezig, setBezig] = useState(false)
+  const fout = van && tot && van > tot ? 'De einddatum ligt vóór de begindatum.' : ''
+
+  async function opslaan(e: FormEvent) {
+    e.preventDefault()
+    if (fout) return
+    setBezig(true)
+    try {
+      await bewaarMoment({ ...m, vasteTrainers: vast, geldigVan: van || undefined, geldigTot: tot || undefined })
+      toast.success(`${momentNaam(m)} bijgewerkt`)
+      onClose()
+    } catch {
+      toast.error('Opslaan lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto">
+        <form onSubmit={opslaan} className="space-y-5">
+          <DialogHeader>
+            <DialogTitle>{momentNaam(m)}</DialogTitle>
+            <DialogDescription>{m.locatie}</DialogDescription>
+          </DialogHeader>
+
+          <fieldset className="space-y-2">
+            <legend className="font-semibold">Vaste trainers</legend>
+            <p className="text-sm text-muted-foreground">
+              Zij geven deze training altijd. Anderen kunnen zich alleen als invaller opgeven en worden pas ingedeeld als een
+              vaste trainer niet kan.
+            </p>
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              {data.trainers.filter(geeftTraining).map((t) => (
+                <li key={t.id}>
+                  <label className="flex min-h-11 items-center gap-3 rounded-lg border px-3 hover:bg-accent">
+                    <Checkbox
+                      checked={vast.includes(t.id)}
+                      onCheckedChange={(aan) => setVast((x) => (aan === true ? [...x, t.id] : x.filter((y) => y !== t.id)))}
+                    />
+                    {t.naam}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            {vast.length > m.trainersNodig && (
+              <p className="text-sm text-muted-foreground">
+                Let op: er zijn meer vaste trainers ({vast.length}) dan nodig ({m.trainersNodig}); het voorstel neemt de eersten.
+              </p>
+            )}
+          </fieldset>
+
+          <fieldset className="space-y-2">
+            <legend className="font-semibold">Alleen in een bepaalde periode?</legend>
+            <p className="text-sm text-muted-foreground">
+              Bijvoorbeeld een proef van januari t/m april. Leeg laten = altijd.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="g-van">Vanaf</Label>
+                <Input id="g-van" type="date" value={van} onChange={(e) => setVan(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="g-tot">Tot en met</Label>
+                <Input id="g-tot" type="date" value={tot} onChange={(e) => setTot(e.target.value)} />
+              </div>
+            </div>
+            {fout && <p className="text-sm text-destructive">{fout}</p>}
+          </fieldset>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Annuleren
+            </Button>
+            <Button type="submit" disabled={bezig || !!fout}>
+              Opslaan
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

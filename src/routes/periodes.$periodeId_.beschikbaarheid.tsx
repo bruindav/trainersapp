@@ -1,6 +1,7 @@
+// Fix: fix-12 — vaste training: vaste trainer hoeft niets te kiezen, anderen alleen 'invallen' of 'nee'
 // Fix: fix-7 — eigen, rustige pagina om beschikbaarheid op te geven (ook namens iemand, door de coördinator)
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowLeft, Check, CircleCheck, Plus, ThumbsUp, X } from 'lucide-react'
+import { ArrowLeft, Check, CircleCheck, Lock, Plus, ThumbsUp, X } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -16,6 +17,7 @@ import {
   trainingenInPeriode,
   type DatumBereik,
   type Keuze,
+  type KeuzeKolom,
   type PeriodeTraining,
   type Roosterperiode,
 } from '@/data/rooster'
@@ -51,6 +53,12 @@ const KEUZE_INFO: { waarde: Keuze; label: string; uitleg: string; icoon: ReactNo
     icoon: <X className="size-5" aria-hidden />,
     aan: 'border-foreground bg-foreground text-background ring-2 ring-foreground',
   },
+]
+
+/** Bij een moment met vaste trainers: alleen invallen of niet. */
+const INVAL_INFO = [
+  { ...KEUZE_INFO[1], label: 'Ik kan invallen', uitleg: 'Als een vaste trainer niet kan' },
+  KEUZE_INFO[2],
 ]
 
 const MAX_OPTIES: (number | null)[] = [null, 1, 2, 3, 4, 6, 8]
@@ -125,7 +133,12 @@ function Formulier({
   const kolommen = keuzeKolommen(periode, data.trainingsmomenten)
   const trainingen = trainingenInPeriode(periode, data.trainingsmomenten, data.jaarplan)
   const bestaand = data.beschikbaarheid[periode.id]?.[trainer.id]
-  const [keuzes, setKeuzes] = useState<Record<string, Keuze>>(bestaand?.keuzes ?? {})
+  // Een vaste trainer staat bij de eigen vaste training standaard op 'graag'.
+  const [keuzes, setKeuzes] = useState<Record<string, Keuze>>(() => {
+    const k = { ...(bestaand?.keuzes ?? {}) }
+    for (const kol of kolommen) if (kol.vast.includes(trainer.id) && !k[kol.sleutel]) k[kol.sleutel] = 'graag'
+    return k
+  })
   const [max, setMax] = useState<number | null>(bestaand?.maxPerMaand ?? null)
   const [nietKunnen, setNietKunnen] = useState<DatumBereik[]>(bestaand?.nietKunnen ?? [])
   const [nieuwVan, setNieuwVan] = useState('')
@@ -171,7 +184,7 @@ function Formulier({
             wanneer”. {namens ? '' : 'Je kunt ze tot de deadline nog wijzigen.'}
           </p>
         </div>
-        <Samenvatting kolommen={kolommen} keuzes={keuzes} max={max} nietKunnen={nietKunnen} />
+        <Samenvatting kolommen={kolommen} trainerId={trainer.id} keuzes={keuzes} max={max} nietKunnen={nietKunnen} />
         <div className="flex flex-wrap gap-3">
           <Button asChild size="lg" className="rounded-full">
             <Link to="/periodes/$periodeId" params={{ periodeId: periode.id }}>
@@ -247,8 +260,28 @@ function Formulier({
               <fieldset key={k.sleutel} className="space-y-3 rounded-2xl border bg-card p-4">
                 <legend className="sr-only">{k.lang}</legend>
                 <KolomKop sleutel={k.sleutel} periode={periode} trainingen={vanDit} />
-                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={k.lang}>
-                  {KEUZE_INFO.map((c) => {
+                {k.vast.includes(trainer.id) ? (
+                  <p className="flex items-start gap-2 rounded-xl bg-nat-green/15 p-3 text-sm">
+                    <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+                    <span>
+                      <strong>Dit is {namens ? `de vaste training van ${voornaam}` : 'jouw vaste training'}.</strong> Kun {namens ? voornaam : 'je'} een keer
+                      niet? Geef die data op bij stap 3, dan zoekt de coördinator een invaller.
+                    </span>
+                  </p>
+                ) : (
+                  <>
+                {k.vast.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Vaste training van {k.vast.map((id) => trainerById(id)?.naam.split(' ')[0] ?? 'oud-trainer').join(' en ')}. Je
+                    wordt alleen ingedeeld als een van hen niet kan.
+                  </p>
+                )}
+                <div
+                  className={cn('grid gap-2', k.vast.length > 0 ? 'grid-cols-2' : 'grid-cols-3')}
+                  role="radiogroup"
+                  aria-label={k.lang}
+                >
+                  {(k.vast.length > 0 ? INVAL_INFO : KEUZE_INFO).map((c) => {
                     const aan = keuzes[k.sleutel] === c.waarde
                     return (
                       <button
@@ -269,6 +302,8 @@ function Formulier({
                     )
                   })}
                 </div>
+                  </>
+                )}
               </fieldset>
             )
           })}
@@ -441,11 +476,13 @@ function KolomKop({ sleutel, periode, trainingen }: { sleutel: string; periode: 
 
 function Samenvatting({
   kolommen,
+  trainerId,
   keuzes,
   max,
   nietKunnen,
 }: {
-  kolommen: { sleutel: string; kort: string; lang: string }[]
+  kolommen: KeuzeKolom[]
+  trainerId: string
   keuzes: Record<string, Keuze>
   max: number | null
   nietKunnen: DatumBereik[]
@@ -456,7 +493,13 @@ function Samenvatting({
       {kolommen.map((k) => (
         <div key={k.sleutel} className="flex justify-between gap-4 px-4 py-3">
           <dt className="text-muted-foreground">{k.lang}</dt>
-          <dd className="font-semibold">{label[keuzes[k.sleutel]] ?? '–'}</dd>
+          <dd className="font-semibold">
+            {k.vast.includes(trainerId)
+              ? 'Vaste training'
+              : k.vast.length > 0 && keuzes[k.sleutel] === 'kan'
+                ? 'Invaller'
+                : (label[keuzes[k.sleutel]] ?? '–')}
+          </dd>
         </div>
       ))}
       <div className="flex justify-between gap-4 px-4 py-3">

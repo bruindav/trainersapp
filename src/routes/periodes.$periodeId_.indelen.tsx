@@ -1,3 +1,4 @@
+// Fix: fix-12 — vaste trainers bovenaan en gemarkeerd; invallers
 // Fix: fix-11 — externe trainer en "zwemmers trainen zelf" in het indeelvenster
 // Fix: fix-10 — indelen door de coördinator; na publicatie het rooster voor iedereen
 import { Link, createFileRoute } from '@tanstack/react-router'
@@ -504,14 +505,18 @@ function IndelenDialog({
     .filter(geeftTraining)
     .map((tr) => {
       const b = besch[tr.id]
-      const keuze = b?.keuzes[t.keuzeSleutel] ?? 'onbekend'
+      const keuze: Keuze | 'onbekend' = b?.keuzes[t.keuzeSleutel] ?? 'onbekend'
       const kanNiet = kanNietOp(b, t.datum)
       const inMaand = tel.get(`${tr.id}|${maand}`) ?? 0
-      return { tr, keuze: kanNiet ? 'nee' : keuze, kanNiet, inMaand, max: b?.maxPerMaand ?? null }
+      const vast = t.vasteTrainers?.includes(tr.id) ?? false
+      return { tr, keuze: (kanNiet ? 'nee' : keuze) as Keuze | 'onbekend', kanNiet, inMaand, max: b?.maxPerMaand ?? null, vast }
     })
     .sort(
       (a, b) =>
-        KEUZE_VOLGORDE[a.keuze] - KEUZE_VOLGORDE[b.keuze] || a.inMaand - b.inMaand || a.tr.naam.localeCompare(b.tr.naam, 'nl'),
+        Number(b.vast) - Number(a.vast) ||
+        KEUZE_VOLGORDE[a.keuze] - KEUZE_VOLGORDE[b.keuze] ||
+        a.inMaand - b.inMaand ||
+        a.tr.naam.localeCompare(b.tr.naam, 'nl'),
     )
 
   function wissel(id: string) {
@@ -618,7 +623,7 @@ function IndelenDialog({
         {!zelf && (
           <>
         <ul className="space-y-1.5" aria-label="Trainers">
-          {kandidaten.map(({ tr, keuze, kanNiet, inMaand, max }) => {
+          {kandidaten.map(({ tr, keuze, kanNiet, inMaand, max, vast }) => {
             const aan = gekozen.includes(tr.id)
             const boven = max !== null && inMaand >= max && !huidig?.trainers.includes(tr.id)
             return (
@@ -639,9 +644,16 @@ function IndelenDialog({
                       {tr.naam}
                       {tr.toezichthouder && <ShieldCheck className="size-3.5 text-nat-blue" aria-label="Toezichthouder" />}
                       {tr.rol === 'Assistent-trainer' && <span className="text-xs font-normal text-muted-foreground">assistent</span>}
+                      {vast && <Badge className="bg-nat-green text-white">vast</Badge>}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {kanNiet ? 'Kan niet op deze datum' : KEUZE_TEKST[keuze]} · {inMaand}× in {MAAND_NAMEN[Number(maand.slice(5, 7)) - 1]}
+                      {kanNiet
+                        ? 'Kan niet op deze datum'
+                        : vast && keuze === 'onbekend'
+                          ? 'vaste trainer'
+                          : !vast && t.vasteTrainers?.length && keuze === 'kan'
+                            ? 'invaller'
+                            : KEUZE_TEKST[keuze]} · {inMaand}× in {MAAND_NAMEN[Number(maand.slice(5, 7)) - 1]}
                       {max !== null ? ` (max ${max})` : ''}
                     </span>
                   </span>

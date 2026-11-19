@@ -1,3 +1,4 @@
+// Fix: fix-12 — vaste trainer zichtbaar als 'V', invallers als 'I'
 // Fix: fix-9 — compactere tabel op mobiel (vaste naamkolom, korte namen)
 // Fix: fix-7 — formulier verhuisd naar eigen pagina; coördinator vult in via 'Wie kan wanneer'
 // Fix: fix-5 — gedeelde onderdelen voor roosterperiodes en beschikbaarheid
@@ -182,7 +183,13 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
                     </span>
                   </th>
                   {kolommen.map((k) => {
-                    const c = CEL[b?.keuzes[k.sleutel] ?? 'leeg']
+                    const vast = k.vast.includes(t.id) && b?.keuzes[k.sleutel] !== 'nee'
+                    const inval = k.vast.length > 0 && !vast && b?.keuzes[k.sleutel] === 'kan'
+                    const c = vast
+                      ? { tekst: 'V', label: 'vaste trainer', klasse: 'bg-nat-green text-white' }
+                      : inval
+                        ? { ...CEL.kan, tekst: 'I', label: 'invaller' }
+                        : CEL[b?.keuzes[k.sleutel] ?? 'leeg']
                     return (
                       <td key={k.sleutel} className="p-0">
                         <span
@@ -237,6 +244,16 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
         <span>
           <strong className="text-foreground">?</strong> nog niet ingevuld
         </span>
+        {kolommen.some((k) => k.vast.length > 0) && (
+          <>
+            <span>
+              <strong className="text-foreground">V</strong> vaste trainer
+            </span>
+            <span>
+              <strong className="text-foreground">I</strong> invaller
+            </span>
+          </>
+        )}
         <span className="inline-flex items-center gap-1">
           <ShieldCheck className="size-3.5 text-nat-blue" aria-hidden /> toezichthouder
         </span>

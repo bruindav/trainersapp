@@ -1,3 +1,4 @@
+// Fix: fix-12 — trainingsmomenten: vaste trainers en geldigheidsperiode.
 // Fix: fix-11 — trainers: vrijgeven, overnemen, ruilen na publicatie; ruilverzoeken; wijzigingslog.
 // Fix: fix-10 — indeling en publicatie op roosterperiodes.
 // Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
@@ -219,7 +220,14 @@ service cloud.firestore {
     match /trainingsmomenten/{id} {
       allow read: if isTrainer();
       allow create, update: if isCoordinator()
-        && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde'])
+        && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde', 'vasteTrainers', 'geldigVan', 'geldigTot'])
+        // fix-12: vaste trainers (hoogstens 6 uid's) en een optionele geldigheidsperiode.
+        && (!('vasteTrainers' in request.resource.data)
+            || (request.resource.data.vasteTrainers is list && request.resource.data.vasteTrainers.size() <= 6))
+        && (!('geldigVan' in request.resource.data) || isDatum(request.resource.data.geldigVan))
+        && (!('geldigTot' in request.resource.data) || isDatum(request.resource.data.geldigTot))
+        && (!('geldigVan' in request.resource.data) || !('geldigTot' in request.resource.data)
+            || request.resource.data.geldigVan <= request.resource.data.geldigTot)
         && request.resource.data.dag is int && request.resource.data.dag >= 0 && request.resource.data.dag <= 6
         && isTijd(request.resource.data.start) && isTijd(request.resource.data.eind)
         && request.resource.data.start < request.resource.data.eind

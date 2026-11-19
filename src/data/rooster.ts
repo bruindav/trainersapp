@@ -1,8 +1,9 @@
+// Fix: fix-12 — vaste trainers per moment en een geldigheidsperiode per moment
 // Fix: fix-10 — indeling en publicatie op de periode
 // Fix: fix-7 — feestdagen markeren bij trainingen
 // Fix: fix-5 — domein van het nieuwe rooster: trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Zie docs/rooster-ontwerp.md voor de besluiten.
-import { addDays, parseISODate } from '@/lib/dates'
+import { addDays, formatShort, parseISODate } from '@/lib/dates'
 import { feestdag } from '@/lib/feestdagen'
 import type { IndelingMap } from './indeling'
 import type { Jaarplan } from './fixtures'
@@ -21,6 +22,24 @@ export interface Trainingsmoment {
   trainersNodig: number
   actief: boolean
   volgorde: number
+  /** Trainers die deze training altijd geven; anderen zijn alleen invaller. */
+  vasteTrainers?: string[]
+  /** Alleen geldig vanaf / tot en met deze datum (bijv. een proef van jan t/m apr). */
+  geldigVan?: string
+  geldigTot?: string
+}
+
+/** Geldt dit moment op deze datum (los van de dag van de week)? */
+export function momentGeldigOp(m: Pick<Trainingsmoment, 'geldigVan' | 'geldigTot'>, datum: string) {
+  return (!m.geldigVan || datum >= m.geldigVan) && (!m.geldigTot || datum <= m.geldigTot)
+}
+
+/** "vanaf 4 jan t/m 30 apr" of "" als het moment altijd geldt. */
+export function geldigheidTekst(m: Pick<Trainingsmoment, 'geldigVan' | 'geldigTot'>) {
+  if (m.geldigVan && m.geldigTot) return `${formatShort(m.geldigVan)} t/m ${formatShort(m.geldigTot)}`
+  if (m.geldigVan) return `vanaf ${formatShort(m.geldigVan)}`
+  if (m.geldigTot) return `t/m ${formatShort(m.geldigTot)}`
+  return ''
 }
 
 export const STANDAARD_LOCATIE = 'Zwembad De Kwakel'
@@ -120,6 +139,8 @@ export interface PeriodeTraining {
   omschrijving: string
   /** Naam van de feestdag als de training daarop valt. */
   feestdag?: string
+  /** Vaste trainers van het moment; anderen vallen alleen in. */
+  vasteTrainers?: string[]
 }
 
 /** Dagnummer met maandag = 0. */
@@ -178,7 +199,7 @@ export function trainingenInPeriode(
     if (vervallen.has(d) || isReces(jaarplan, d)) continue
     const dag = dagVan(d)
     for (const m of gekozen) {
-      if (m.dag !== dag) continue
+      if (m.dag !== dag || !momentGeldigOp(m, d)) continue
       uit.push({
         key: `${d}|${m.id}`,
         datum: d,
@@ -189,6 +210,7 @@ export function trainingenInPeriode(
         trainersNodig: m.trainersNodig,
         omschrijving: '',
         feestdag: feestdag(d),
+        ...(m.vasteTrainers?.length ? { vasteTrainers: m.vasteTrainers } : {}),
       })
     }
   }
@@ -196,10 +218,18 @@ export function trainingenInPeriode(
 }
 
 /** De sleutels waarvoor beschikbaarheid wordt gevraagd, met een label. */
+export interface KeuzeKolom {
+  sleutel: string
+  kort: string
+  lang: string
+  /** Vaste trainers: voor hen ligt de keuze vast, anderen kunnen alleen invallen. */
+  vast: string[]
+}
+
 export function keuzeKolommen(
-  periode: Pick<Roosterperiode, 'soort' | 'momentIds' | 'losseTrainingen'>,
+  periode: Pick<Roosterperiode, 'soort' | 'momentIds' | 'losseTrainingen'> & Partial<Pick<Roosterperiode, 'van' | 'tot'>>,
   momenten: Trainingsmoment[],
-): { sleutel: string; kort: string; lang: string }[] {
+): KeuzeKolom[] {
   if (periode.soort === 'los') {
     return [...periode.losseTrainingen]
       .sort((a, b) => a.datum.localeCompare(b.datum) || a.start.localeCompare(b.start))
@@ -207,13 +237,26 @@ export function keuzeKolommen(
         sleutel: l.id,
         kort: `${DAGEN_KORT[dagVan(l.datum)]} ${l.datum.slice(8, 10)}-${l.datum.slice(5, 7)}`,
         lang: `${l.omschrijving || 'Training'} · ${l.start}–${l.eind} · ${l.locatie}`,
+        vast: [],
       }))
   }
-  return sorteerMomenten(momenten.filter((m) => periode.momentIds.includes(m.id))).map((m) => ({
-    sleutel: m.id,
-    kort: momentLabel(m),
-    lang: `${momentNaam(m)} · ${m.locatie}`,
-  }))
+  return sorteerMomenten(
+    momenten.filter(
+      (m) =>
+        periode.momentIds.includes(m.id) &&
+        // Een moment dat in deze periode nooit geldt, hoeft niet gevraagd te worden.
+        (!periode.tot || !m.geldigVan || m.geldigVan <= periode.tot) &&
+        (!periode.van || !m.geldigTot || m.geldigTot >= periode.van),
+    ),
+  ).map((m) => {
+    const geldig = geldigheidTekst(m)
+    return {
+      sleutel: m.id,
+      kort: momentLabel(m),
+      lang: `${momentNaam(m)} · ${m.locatie}${geldig ? ` · ${geldig}` : ''}`,
+      vast: m.vasteTrainers ?? [],
+    }
+  })
 }
 
 /** Heeft deze trainer voor elke kolom iets gekozen? */

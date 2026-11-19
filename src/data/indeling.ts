@@ -1,3 +1,4 @@
+// Fix: fix-12 — vaste trainers eerst; anderen alleen als invaller
 // Fix: fix-11 — externe trainer, zwemmers trainen zelf, open plekken; nodig altijd opgeslagen
 // Fix: fix-10 — indelen: voorstel, waarschuwingen en tellingen (pure functies, getest)
 import type { Toezichthouder, Trainer } from './fixtures'
@@ -88,8 +89,23 @@ export function maakVoorstel(
     const nodig = bestaand?.zelf ? 0 : nodigVoor(t, bestaand) - (bestaand?.extern ? 1 : 0)
     const gekozen: Trainer[] = []
     const maand = maandVan(t.datum)
+    const tel = (tr: Trainer) => {
+      totaal.set(tr.id, (totaal.get(tr.id) ?? 0) + 1)
+      perMaand.set(`${tr.id}|${maand}`, (perMaand.get(`${tr.id}|${maand}`) ?? 0) + 1)
+    }
 
-    for (let plek = 0; plek < nodig; plek++) {
+    // Vaste trainers staan er altijd, tenzij ze die dag niet kunnen.
+    // Hun maximum per maand telt hier niet: de training is van hen.
+    for (const id of t.vasteTrainers ?? []) {
+      if (gekozen.length >= nodig) break
+      const tr = actief.find((x) => x.id === id)
+      const b = beschikbaarheid[id]
+      if (!tr || b?.keuzes[t.keuzeSleutel] === 'nee' || kanNietOp(b, t.datum)) continue
+      gekozen.push(tr)
+      tel(tr)
+    }
+
+    for (let plek = gekozen.length; plek < nodig; plek++) {
       const heeftVolwaardig = gekozen.some((g) => g.rol === 'Trainer')
       const heeftToezicht = gekozen.some((g) => g.toezichthouder)
       const kandidaten = actief
@@ -123,8 +139,7 @@ export function maakVoorstel(
       const keuze = kandidaten[0]?.tr
       if (!keuze) break
       gekozen.push(keuze)
-      totaal.set(keuze.id, (totaal.get(keuze.id) ?? 0) + 1)
-      perMaand.set(`${keuze.id}|${maand}`, (perMaand.get(`${keuze.id}|${maand}`) ?? 0) + 1)
+      tel(keuze)
     }
 
     uit[t.key] = { ...volledig(t, bestaand), trainers: gekozen.map((g) => g.id) }
@@ -166,7 +181,8 @@ export function controleer(
     const k = b?.keuzes[t.keuzeSleutel]
     if (k === 'nee' || kanNietOp(b, t.datum)) {
       uit.push({ soort: 'kanNiet', tekst: `${x.naam.split(' ')[0]} kan eigenlijk niet`, ernstig: true })
-    } else if (k === 'kan') {
+    } else if (k === 'kan' && !t.vasteTrainers?.length) {
+      // Bij een moment met vaste trainers betekent 'kan' "invaller": geen waarschuwing.
       uit.push({ soort: 'alsHetMoet', tekst: `${x.naam.split(' ')[0]}: als het moet`, ernstig: false })
     }
   }

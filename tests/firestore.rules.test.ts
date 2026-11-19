@@ -1,3 +1,4 @@
+// Fix: fix-12 — regels voor vaste trainers en geldigheid van momenten
 // Fix: fix-11 — vrijgeven, overnemen, ruilen
 // Fix: fix-10 — indeling
 // Fix: fix-5 — momenten, periodes, beschikbaarheid
@@ -340,6 +341,13 @@ describe('roosterperiodes en beschikbaarheid', () => {
     await assertSucceeds(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm1'), moment))
     await assertFails(setDoc(doc(als(TRAINER), 'trainingsmomenten', 'm2'), moment))
     await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm3'), { ...moment, start: '25:00' }))
+    // fix-12: vaste trainers en geldigheidsperiode
+    await assertSucceeds(
+      setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm4'), { ...moment, vasteTrainers: ['a', 'd'], geldigVan: '2027-01-01', geldigTot: '2027-04-30' }),
+    )
+    await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm5'), { ...moment, geldigVan: '2027-05-01', geldigTot: '2027-04-30' }))
+    await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm6'), { ...moment, geldigTot: 'april' }))
+    await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm7'), { ...moment, vasteTrainers: 'aaldert' }))
     await assertSucceeds(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p1'), periode('concept')))
     await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p2'), periode('concept')))
     await assertFails(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p3'), { ...periode('concept'), status: 'klaar' }))

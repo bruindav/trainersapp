@@ -1,3 +1,4 @@
+// Fix: fix-12 — geldigheidsperiode van een moment en vaste trainers
 // Fix: fix-7 — feestdag op training
 // Fix: fix-5 — trainingen in een periode, kolommen en invulstatus
 import { describe, expect, it } from 'vitest'
@@ -8,6 +9,7 @@ import {
   isVolledigIngevuld,
   kanNietOp,
   keuzeKolommen,
+  momentGeldigOp,
   trainingenInPeriode,
   type Roosterperiode,
   type Trainingsmoment,
@@ -77,5 +79,25 @@ describe('beschikbaarheid', () => {
   it('kan niet op data in een opgegeven bereik', () => {
     expect(kanNietOp(b, '2027-02-02')).toBe(true)
     expect(kanNietOp(b, '2027-02-04')).toBe(false)
+  })
+})
+
+describe('geldigheid en vaste trainers', () => {
+  const proef = momenten.map((m) => (m.id === 'm4' ? { ...m, geldigVan: '2027-01-01', geldigTot: '2027-01-31', vasteTrainers: ['aa'] } : m))
+  it('een moment met een periode geldt alleen binnen die periode', () => {
+    expect(momentGeldigOp({ geldigVan: '2027-01-01', geldigTot: '2027-04-30' }, '2027-04-30')).toBe(true)
+    expect(momentGeldigOp({ geldigVan: '2027-01-01', geldigTot: '2027-04-30' }, '2027-05-02')).toBe(false)
+    expect(momentGeldigOp({}, '2030-01-01')).toBe(true)
+    const m4 = trainingenInPeriode(periode, proef, jaarplan).filter((t) => t.keuzeSleutel === 'm4')
+    expect(m4.every((t) => t.datum <= '2027-01-31')).toBe(true)
+    expect(m4.length).toBeGreaterThan(0)
+    expect(m4[0].vasteTrainers).toEqual(['aa'])
+  })
+  it('vraagt een moment niet uit als het in de hele periode niet geldt', () => {
+    const later = momenten.map((m) => (m.id === 'm4' ? { ...m, geldigVan: '2027-06-01' } : m))
+    expect(keuzeKolommen(periode, later).map((k) => k.sleutel)).not.toContain('m4')
+    const k4 = keuzeKolommen(periode, proef).find((k) => k.sleutel === 'm4')!
+    expect(k4.vast).toEqual(['aa'])
+    expect(k4.lang).toMatch(/t\/m/)
   })
 })

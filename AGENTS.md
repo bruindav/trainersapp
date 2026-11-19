@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-12 — vaste trainers en geldigheidsperiode per moment -->
 <!-- Fix: fix-11 — Mijn rooster, ruilen, wijzigingslog -->
 
 This document describes the project for developers and AI agents working on this codebase.
@@ -89,7 +90,7 @@ This document describes the project for developers and AI agents working on this
 | `trainers/{uid}` | naam, initialen, kleur, rol (`Trainer`/`Assistent-trainer`/`Geen training`), specialiteit, email, taken `coordinator`/`jaarplanBeheer`/`teamBeheer`/`toezichthouder` (bool), `test` | coordinator; teamBeheer (not for coordinators / heavy tasks); self only via setup or invite |
 | `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp + the four task flags | coordinator / teamBeheer (invitee may delete own on redeem) |
 | `toezichthouders/{id}` | naam, notitie — the club's separate group of supervisors (no accounts yet) | coordinator / teamBeheer |
-| `trainingsmomenten/{id}` | dag (0=ma…6=zo), start, eind, locatie, trainersNodig, actief, volgorde | coordinator |
+| `trainingsmomenten/{id}` | dag (0=ma…6=zo), start, eind, locatie, trainersNodig, actief, volgorde, vasteTrainers[]?, geldigVan?, geldigTot? | coordinator |
 | `roosterperiodes/{id}` | naam, soort (`wekelijks`/`los`), van, tot, status (`concept`→`beschikbaarheid`→`indelen`→`gepubliceerd`/`afgesloten`), deadline, momentIds, losseTrainingen[], vervallenData[], indeling {`datum|momentId`: {trainers[], nodig, toezicht?, extern?, externToezicht?, zelf?, schema?}}, versie, gepubliceerdOp, laatsteWijziging | coordinator; after publication a trainer may release own slot, take an open slot, or execute an accepted request (rules check exactly) |
 | `roosterperiodes/{id}/wijzigingslog/{id}` | soort (vrijgeven/overnemen/ruil/overdracht/indeling), tekst, door, op — shown to the coordinator | any trainer, as self |
 | `ruilverzoeken/{id}` | periodeId, van, naar, vanKey, terugKey (null = only take over), status open/geaccepteerd/geweigerd/ingetrokken, bericht | create by `van`; `naar` refuses or accepts (accept only together with the roster change); `van` withdraws |
@@ -186,6 +187,7 @@ pnpm preview       # Preview the production build
 - **Jaarplan**: on first-time setup `STANDAARD_JAARPLAN` (season 2026–2027, goal EuroGames Cardiff 14–17 Jul 2027) is written to `jaarplan/huidig`; competition dates other than EuroGames are "onder voorbehoud".
 - **Logged-in trainer** = Firebase uid (`huidigeTrainerId`).
 - **Rol vs. taken** (fix-3): `rol` says whether someone gives training (`Geen training` = e.g. a coordinator who doesn't coach; excluded from roster and training pickers). Tasks are separate flags: `coordinator` (schedules; may do everything), `jaarplanBeheer` (edits/publishes the jaarplan), `teamBeheer` (delegated by the coordinator: invite and edit members, but never coordinators or the heavy tasks `coordinator`/`teamBeheer`), `toezichthouder` (pool-supervisor qualification). A coordinator can't remove their own coordinator flag or delete themselves, so one always remains. Legacy docs with `rol: 'Hoofdtrainer'` count as coordinator and are migrated on that user's next login.
+- **Vaste trainers** (fix-12): a moment can have fixed trainers (e.g. Sunday 11:00). In the availability form they don't choose for that moment (stored as `graag`); others only choose "Ik kan invallen" (stored as `kan`) or "Nee". `maakVoorstel` places available fixed trainers first (ignoring their monthly max) and fills only the remaining slots. A moment can be limited to a date range (`geldigVan`/`geldigTot`, e.g. a trial Jan–Apr); outside it no trainings are generated and periods that never overlap don't ask for it.
 - **Toezicht**: every training needs a supervisor — a qualified trainer or someone from `toezichthouders`, also when swimmers train without a trainer.
 - **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
 - **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.

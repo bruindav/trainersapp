@@ -77,3 +77,26 @@ describe('openPlekken met extern en zelf', () => {
     expect(openPlekken(t, { trainers: [], zelf: true })).toBe(0)
   })
 })
+
+// Fix: fix-12 — vaste trainers en invallers
+describe('vaste trainers', () => {
+  const vast = (datum: string): PeriodeTraining => ({ ...training(datum, 2), vasteTrainers: ['aa', 'dv'] })
+  const trainers = [T('aa'), T('dv'), T('x'), T('y')]
+  it('vaste trainers staan er altijd, ook zonder ingevulde beschikbaarheid en boven hun maximum', () => {
+    const besch = { aa: B('aa', 'graag', 1), x: B('x', 'graag'), y: B('y', 'kan') }
+    const v = maakVoorstel([vast('2027-01-10'), vast('2027-01-17')], trainers, besch)
+    expect(v['2027-01-10|m1'].trainers).toEqual(['aa', 'dv'])
+    expect(v['2027-01-17|m1'].trainers).toEqual(['aa', 'dv'])
+  })
+  it('kan een vaste trainer niet, dan valt een invaller in', () => {
+    const besch = {
+      aa: B('aa', 'graag', null, [{ van: '2027-01-10', tot: '2027-01-10' }]),
+      x: B('x', 'nee'),
+      y: B('y', 'kan'),
+    }
+    const v = maakVoorstel([vast('2027-01-10')], trainers, besch)
+    expect(v['2027-01-10|m1'].trainers).toEqual(['dv', 'y'])
+    // Een invaller ('kan') geeft bij een vast moment geen "als het moet"-waarschuwing.
+    expect(controleer(vast('2027-01-10'), v['2027-01-10|m1'], trainers, besch).map((w) => w.soort)).not.toContain('alsHetMoet')
+  })
+})

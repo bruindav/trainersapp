@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-12 — vaste trainers en geldigheid van trainingsmomenten.
  * Fix: fix-11 — vrijgeven, overnemen, ruilverzoeken, wijzigingslog; publiceren met volledige indeling.
  * Fix: fix-10 — indeling opslaan en publiceren.
  * Fix: fix-8 — testbeschikbaarheid voor testtrainers.
@@ -281,6 +282,9 @@ export function startSync(uid: string, magTeam: boolean): () => void {
               actief: x.actief !== false,
               volgorde: Number(x.volgorde ?? 0),
             }
+            if (Array.isArray(x.vasteTrainers) && x.vasteTrainers.length) m.vasteTrainers = x.vasteTrainers.map(String)
+            if (typeof x.geldigVan === 'string' && x.geldigVan) m.geldigVan = x.geldigVan
+            if (typeof x.geldigTot === 'string' && x.geldigTot) m.geldigTot = x.geldigTot
             return m
           })
           .sort((a, b) => a.dag - b.dag || a.start.localeCompare(b.start))
@@ -682,9 +686,15 @@ export async function voegStandaardMomentenToe() {
 }
 
 export async function bewaarMoment(m: Omit<Trainingsmoment, 'id'> & { id?: string }) {
-  const { id, ...data } = m
+  const { id, vasteTrainers, geldigVan, geldigTot, ...data } = m
   const ref = id ? doc(getDb(), 'trainingsmomenten', id) : doc(collection(getDb(), 'trainingsmomenten'))
-  await setDoc(ref, data)
+  // Alleen gevulde optionele velden (Firestore kent geen undefined).
+  await setDoc(ref, {
+    ...data,
+    ...(vasteTrainers?.length ? { vasteTrainers } : {}),
+    ...(geldigVan ? { geldigVan } : {}),
+    ...(geldigTot ? { geldigTot } : {}),
+  })
 }
 
 export async function verwijderMoment(id: string) {
