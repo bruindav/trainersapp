@@ -1,10 +1,11 @@
+// Fix: fix-18 — uitnodiging mailen (inloglink), opnieuw mailen of zelf mailen
 // Fix: fix-17 — naam van een teamlid wijzigen
 // Fix: fix-4 — rol direct in het menu (submenu viel op mobiel buiten beeld)
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht), groep toezichthouders
 // Fix: fix-2 — testtrainers toevoegen en verwijderen
 // Fix: fix-1 — Team: trainers bekijken; hoofdtrainer nodigt uit en beheert rollen
 import { createFileRoute } from '@tanstack/react-router'
-import { FlaskConical, Mail, MoreHorizontal, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { FlaskConical, Mail, MoreHorizontal, Send, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -51,6 +52,7 @@ import {
   type TrainerRol,
   type Uitnodiging,
 } from '@/data/fixtures'
+import { stuurUitnodigingsMail } from '@/data/auth'
 import {
   initialenVan,
   nodigTrainerUit,
@@ -195,11 +197,34 @@ function TeamPagina() {
                           {u.email} · uitgenodigd op {formatShort(u.uitgenodigdOp)}
                         </p>
                       </div>
-                      {(ik.coordinator || !u.coordinator) && (
-                        <Button variant="ghost" size="sm" onClick={() => setInTeTrekken(u)}>
-                          Intrekken
+                      <span className="flex flex-wrap gap-1">
+                        <Button asChild variant="outline" size="sm">
+                          <a href={uitnodigingMailto(u)}>
+                            <Mail aria-hidden /> Mail sturen
+                          </a>
                         </Button>
-                      )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Telt mee voor het maximum van 5 inlogmails per dag"
+                          onClick={() =>
+                            stuurUitnodigingsMail(u.email).then(
+                              () => toast.success(`Inloglink gestuurd naar ${u.email}`),
+                              (err) => {
+                                console.error(err)
+                                toast.error('Versturen lukte niet (misschien is het dagmaximum bereikt). Gebruik "Mail sturen".')
+                              },
+                            )
+                          }
+                        >
+                          <Send aria-hidden /> Inloglink sturen
+                        </Button>
+                        {(ik.coordinator || !u.coordinator) && (
+                          <Button variant="ghost" size="sm" onClick={() => setInTeTrekken(u)}>
+                            Intrekken
+                          </Button>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -491,6 +516,77 @@ function ToezichthoudersKaart({ magBeheren }: { magBeheren: boolean }) {
   )
 }
 
+/**
+ * Na het uitnodigen: de mail versturen. Standaard vanuit je eigen
+ * mailprogramma; de app kan ook een inloglink sturen, maar Firebase staat
+ * gratis maar 5 van die mails per dag toe (voor alle inlogmails samen).
+ */
+function UitnodigingVersturen({ u, onKlaar }: { u: { naam: string; email: string }; onKlaar: () => void }) {
+  const [bezig, setBezig] = useState(false)
+  return (
+    <div className="space-y-4">
+      <DialogHeader>
+        <DialogTitle>Uitnodiging klaargezet</DialogTitle>
+        <DialogDescription>
+          {voornaam(u.naam)} kan nu inloggen met {u.email}. Laat het {voornaam(u.naam)} weten met een mail.
+        </DialogDescription>
+      </DialogHeader>
+      <Button asChild size="lg" className="w-full">
+        <a href={uitnodigingMailto(u)} onClick={() => setTimeout(onKlaar, 300)}>
+          <Mail aria-hidden /> Mail openen in je mailprogramma
+        </a>
+      </Button>
+      <div className="space-y-1.5 rounded-lg bg-muted p-3 text-sm">
+        <p>
+          Of laat de app een inloglink sturen. Let op: dat kan hoogstens 5 keer per dag voor alle inlogmails samen, en de
+          mail komt van een onbekend adres (kijk ook in de spammap).
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={bezig}
+          onClick={async () => {
+            setBezig(true)
+            try {
+              await stuurUitnodigingsMail(u.email)
+              toast.success(`Inloglink gestuurd naar ${u.email}`)
+              onKlaar()
+            } catch (err) {
+              console.error(err)
+              toast.error('Versturen lukte niet (misschien is het dagmaximum bereikt). Gebruik je eigen mail.')
+            } finally {
+              setBezig(false)
+            }
+          }}
+        >
+          <Send aria-hidden /> Inloglink laten sturen
+        </Button>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onKlaar}>
+          Sluiten
+        </Button>
+      </DialogFooter>
+    </div>
+  )
+}
+
+/** Een kant-en-klare mail vanuit je eigen mailprogramma. */
+function uitnodigingMailto(u: { naam: string; email: string }) {
+  const adres = window.location.origin
+  const tekst = [
+    `Hoi ${voornaam(u.naam)},`,
+    '',
+    'Je bent uitgenodigd voor de Trainersapp van Nat Utrecht: het rooster, je beschikbaarheid en het trainingslogboek op één plek.',
+    '',
+    `Ga naar ${adres} en log in met dit e-mailadres (${u.email}).`,
+    'Is dit een Gmail- of Google-adres? Kies dan "Inloggen met Google", dat is het snelst. Anders vul je je e-mailadres in en krijg je een inloglink in je mail (kijk eventueel in de spammap).',
+    '',
+    'Groet,',
+  ].join('\n')
+  return `mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent('Uitnodiging Trainersapp Nat Utrecht')}&body=${encodeURIComponent(tekst)}`
+}
+
 /** Oude namen van testtrainers → nieuwe namen (wens van 19 nov 2026). */
 const NIEUWE_TESTNAMEN: Record<string, string> = {
   'Elke Rovers': 'Rita Jager',
@@ -596,6 +692,7 @@ function UitnodigenDialog({
   const [taken, setTaken] = useState<Taken>(GEEN_TAKEN)
   const [fouten, setFouten] = useState<Record<string, string>>({})
   const [bezig, setBezig] = useState(false)
+  const [klaar, setKlaar] = useState<{ naam: string; email: string } | null>(null)
 
   function reset() {
     setEmail('')
@@ -627,11 +724,9 @@ function UitnodigenDialog({
     setBezig(true)
     try {
       await nodigTrainerUit({ ...u, ...taken })
-      toast.success(`Uitnodiging klaargezet voor ${u.naam}`, {
-        description: `${voornaam(u.naam)} kan nu inloggen op ${window.location.host} met ${u.email}.`,
-      })
+      // Toegang staat klaar; nu nog de mail (vanuit je eigen mailprogramma).
+      setKlaar({ naam: u.naam, email: u.email })
       reset()
-      onOpenChange(false)
     } catch {
       setFouten({ algemeen: 'Opslaan lukte niet. Probeer het opnieuw.' })
     } finally {
@@ -653,16 +748,29 @@ function UitnodigenDialog({
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) reset()
+        if (!o) {
+          reset()
+          setKlaar(null)
+        }
         onOpenChange(o)
       }}
     >
       <DialogContent className="max-h-[90svh] overflow-y-auto">
+        {klaar ? (
+          <UitnodigingVersturen
+            u={klaar}
+            onKlaar={() => {
+              setKlaar(null)
+              onOpenChange(false)
+            }}
+          />
+        ) : (
+        <>
         <DialogHeader>
           <DialogTitle>Teamlid uitnodigen</DialogTitle>
           <DialogDescription>
-            Alleen dit e-mailadres kan straks inloggen. De app verstuurt zelf geen mail: laat je collega weten dat hij
-            of zij kan inloggen op {window.location.host}.
+            Alleen dit e-mailadres kan straks inloggen. Daarna stuur je je collega een uitnodigingsmail vanuit je eigen
+            mailprogramma.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={verstuur} noValidate className="space-y-4">
@@ -746,6 +854,8 @@ function UitnodigenDialog({
             </Button>
           </DialogFooter>
         </form>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   )
