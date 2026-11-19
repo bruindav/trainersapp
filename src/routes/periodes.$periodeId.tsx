@@ -1,3 +1,4 @@
+// Fix: fix-9 — inklapbare blokken
 // Fix: fix-8 — knop: testbeschikbaarheid voor testtrainers
 // Fix: fix-7 — beschikbaarheid via eigen pagina; feestdagen signaleren
 // Fix: fix-5 — één roosterperiode: instellingen, beschikbaarheid opgeven, wie kan wanneer
@@ -7,6 +8,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/app-shell'
+import { InklapbareKaart } from '@/components/inklapbare-kaart'
 import {
   StatusBadge,
   StatusStappen,
@@ -14,7 +16,7 @@ import {
 } from '@/components/rooster-onderdelen'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -151,6 +153,8 @@ function PeriodePagina() {
         )}
 
         <Sectie
+          id="periode-trainingen"
+          standaardOpen={false}
           titel="Trainingen in deze periode"
           omschrijving={
             periode.soort === 'wekelijks'
@@ -185,6 +189,7 @@ function PeriodePagina() {
         </Sectie>
 
         <Sectie
+          id="periode-wiekan"
           titel="Wie kan wanneer"
           omschrijving={
             nogNiet.length === 0
@@ -202,17 +207,23 @@ function PeriodePagina() {
   )
 }
 
-function Sectie({ titel, omschrijving, children }: { titel: string; omschrijving?: string; children: ReactNode }) {
+function Sectie({
+  id,
+  titel,
+  omschrijving,
+  standaardOpen = true,
+  children,
+}: {
+  id: string
+  titel: string
+  omschrijving?: string
+  standaardOpen?: boolean
+  children: ReactNode
+}) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="text-lg font-bold">{titel}</h2>
-        </CardTitle>
-        {omschrijving && <CardDescription>{omschrijving}</CardDescription>}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <InklapbareKaart id={id} titel={titel} omschrijving={omschrijving} standaardOpen={standaardOpen}>
+      {children}
+    </InklapbareKaart>
   )
 }
 
@@ -316,14 +327,13 @@ function Instellingen({ periode, trainingen }: { periode: Roosterperiode; traini
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="text-lg font-bold">Instellingen</h2>
-        </CardTitle>
-        <CardDescription>Alleen zichtbaar voor de coördinator.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <InklapbareKaart
+      id="periode-instellingen"
+      titel="Instellingen"
+      omschrijving="Datums, trainingsmomenten, feestdagen en vervallen data. Alleen zichtbaar voor de coördinator."
+      standaardOpen={periode.status === 'concept'}
+    >
+      <div className="space-y-6">
         <form onSubmit={bewaarBasis} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] lg:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="i-naam">Naam</Label>
@@ -462,8 +472,8 @@ function Instellingen({ periode, trainingen }: { periode: Roosterperiode; traini
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </InklapbareKaart>
   )
 }
 

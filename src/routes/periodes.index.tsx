@@ -1,3 +1,4 @@
+// Fix: fix-9 — trainingsmomenten inklapbaar
 // Fix: fix-5 — roosterperiodes en vaste trainingsmomenten
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { CalendarPlus, ChevronRight, Clock, Plus, Trash2 } from 'lucide-react'
@@ -5,10 +6,11 @@ import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/app-shell'
+import { InklapbareKaart } from '@/components/inklapbare-kaart'
 import { BeschikbaarheidMelding, StatusBadge } from '@/components/rooster-onderdelen'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -169,18 +171,14 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="flex items-center gap-2 text-lg font-bold">
-            <Clock className="size-5 text-primary" aria-hidden /> Vaste trainingsmomenten
-          </h2>
-        </CardTitle>
-        <CardDescription>
-          De trainingen die elke week terugkomen. Een nieuwe wekelijkse periode neemt de actieve momenten over.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <InklapbareKaart
+      id="momenten"
+      icoon={<Clock className="size-5" aria-hidden />}
+      titel="Vaste trainingsmomenten"
+      omschrijving="De trainingen die elke week terugkomen. Een nieuwe wekelijkse periode neemt de actieve momenten over."
+      standaardOpen={data.trainingsmomenten.length === 0}
+    >
+      <div className="space-y-4">
         {data.trainingsmomenten.length === 0 ? (
           <div className="space-y-3">
             <p className="text-muted-foreground">Nog geen trainingsmomenten ingesteld.</p>
@@ -278,8 +276,8 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
             </Button>
           </form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </InklapbareKaart>
   )
 }
 

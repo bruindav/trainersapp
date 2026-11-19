@@ -1,3 +1,4 @@
+<!-- Fix: fix-9 — inklapbare blokken -->
 <!-- Fix: fix-8 — testbeschikbaarheid -->
 <!-- Fix: fix-7 — feestdagen; beschikbaarheid op eigen pagina -->
 <!-- Fix: fix-6 — bouwplan hernummerd -->
@@ -32,5 +33,6 @@ Besloten met Dave op 19 nov 2026. Schermvoorstel: <https://claude.ai/artifact/Jm
 | fix-6 | Hosting ook op natutrecht-trainersapp.web.app ✅ |
 | fix-7 | Feestdagen signaleren; beschikbaarheid op een eigen, duidelijke pagina ✅ |
 | fix-8 | Knop: testbeschikbaarheid voor testtrainers ✅ |
-| fix-9 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren |
-| fix-10 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |
+| fix-9 | Inklapbare blokken, compactere tabel op mobiel ✅ |
+| fix-10 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren |
+| fix-11 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |

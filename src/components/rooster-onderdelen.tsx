@@ -1,3 +1,4 @@
+// Fix: fix-9 — compactere tabel op mobiel (vaste naamkolom, korte namen)
 // Fix: fix-7 — formulier verhuisd naar eigen pagina; coördinator vult in via 'Wie kan wanneer'
 // Fix: fix-5 — gedeelde onderdelen voor roosterperiodes en beschikbaarheid
 import { Link } from '@tanstack/react-router'
@@ -95,6 +96,12 @@ export function BeschikbaarheidMelding() {
   )
 }
 
+/** "Marlien Wijnhof" → "Marlien W." voor smalle schermen. */
+function kortNaam(naam: string) {
+  const delen = naam.trim().split(/\s+/)
+  return delen.length > 1 ? `${delen[0]} ${delen[delen.length - 1][0]}.` : naam
+}
+
 const CEL: Record<Keuze | 'leeg', { tekst: string; klasse: string; label: string }> = {
   graag: { tekst: 'G', klasse: 'bg-nat-green/20', label: 'graag' },
   kan: { tekst: 'A', klasse: 'bg-nat-yellow/25', label: 'als het moet' },
@@ -120,7 +127,7 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
           <caption className="sr-only">Beschikbaarheid per trainer voor {periode.naam}</caption>
           <thead>
             <tr>
-              <th scope="col" className="px-2 py-1 text-left text-xs font-bold text-muted-foreground">
+              <th scope="col" className="sticky left-0 z-10 bg-card px-2 py-1 text-left text-xs font-bold text-muted-foreground">
                 Trainer
               </th>
               {kolommen.map((k) => (
@@ -142,22 +149,30 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
               const komend = (b?.nietKunnen ?? []).filter((r) => r.tot >= vandaag)
               return (
                 <tr key={t.id}>
-                  <th scope="row" className="px-2 py-1 text-left font-semibold">
-                    <span className="flex items-center gap-2">
-                      <TrainerAvatar trainer={t} size="sm" />
-                      <span className="whitespace-nowrap">{t.naam}</span>
+                  <th scope="row" className="sticky left-0 z-10 bg-card px-1 py-1 text-left font-semibold sm:px-2">
+                    <span className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="hidden sm:inline-flex">
+                        <TrainerAvatar trainer={t} size="sm" />
+                      </span>
+                      <span className="whitespace-nowrap">
+                        <span className="sm:hidden">{kortNaam(t.naam)}</span>
+                        <span className="hidden sm:inline">{t.naam}</span>
+                      </span>
                       {t.toezichthouder && (
-                        <ShieldCheck className="size-4 text-nat-blue" aria-label="Toezichthouder" />
+                        <ShieldCheck className="size-3.5 shrink-0 text-nat-blue sm:size-4" aria-label="Toezichthouder" />
                       )}
                       {t.rol === 'Assistent-trainer' && (
-                        <span className="text-xs font-normal text-muted-foreground">assistent</span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          <span className="sm:hidden">ass.</span>
+                          <span className="hidden sm:inline">assistent</span>
+                        </span>
                       )}
                       {ik?.coordinator && (
                         <Link
                           to="/periodes/$periodeId/beschikbaarheid"
                           params={{ periodeId: periode.id }}
                           search={{ trainer: t.id }}
-                          className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:size-9"
                           aria-label={`Beschikbaarheid invullen voor ${t.naam}`}
                           title="Invullen namens deze trainer"
                         >
@@ -171,7 +186,7 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
                     return (
                       <td key={k.sleutel} className="p-0">
                         <span
-                          className={cn('flex h-9 min-w-11 items-center justify-center rounded-md font-black', c.klasse)}
+                          className={cn('flex h-9 min-w-9 items-center justify-center rounded-md font-black sm:min-w-11', c.klasse)}
                           aria-label={`${k.kort}: ${c.label}`}
                         >
                           {c.tekst}
@@ -191,8 +206,9 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row" className="px-2 py-1 text-left text-xs font-bold text-muted-foreground">
-                Graag / als het moet
+              <th scope="row" className="sticky left-0 z-10 bg-card px-2 py-1 text-left text-xs font-bold text-muted-foreground">
+                <span className="sm:hidden">G / A</span>
+                <span className="hidden sm:inline">Graag / als het moet</span>
               </th>
               {kolommen.map((k) => {
                 const graag = trainers.filter((t) => alle[t.id]?.keuzes[k.sleutel] === 'graag').length
