@@ -1,3 +1,4 @@
+// Fix: fix-4 — rol direct in het menu (submenu viel op mobiel buiten beeld)
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht), groep toezichthouders
 // Fix: fix-2 — testtrainers toevoegen en verwijderen
 // Fix: fix-1 — Team: trainers bekijken; hoofdtrainer nodigt uit en beheert rollen
@@ -31,9 +32,6 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -304,25 +302,20 @@ function TeamlidActies({ trainer, ik, onVerwijder }: { trainer: Trainer; ik: Tra
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Rol</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={trainer.rol}
-              onValueChange={(rol) =>
-                rol !== trainer.rol &&
-                wijzig({ rol: rol as TrainerRol }, `${voornaam(trainer.naam)}: ${rol.toLowerCase()}`)
-              }
-            >
-              {ALLE_ROLLEN.map((r) => (
-                <DropdownMenuRadioItem key={r} value={r}>
-                  {r}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+      <DropdownMenuContent align="end" collisionPadding={8} className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-60 overflow-y-auto">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Rol</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={trainer.rol}
+          onValueChange={(rol) =>
+            rol !== trainer.rol && wijzig({ rol: rol as TrainerRol }, `${voornaam(trainer.naam)}: ${rol.toLowerCase()}`)
+          }
+        >
+          {ALLE_ROLLEN.map((r) => (
+            <DropdownMenuRadioItem key={r} value={r} onSelect={(e) => e.preventDefault()}>
+              {r}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Taken</DropdownMenuLabel>
         {TAKEN.map((taak) => (
