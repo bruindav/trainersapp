@@ -1,3 +1,4 @@
+// Fix: fix-13 — waarschuwing bij een verdachte periode (verkeerd jaar)
 // Fix: fix-12 — vaste trainers per moment en een geldigheidsperiode per moment
 // Fix: fix-10 — indeling en publicatie op de periode
 // Fix: fix-7 — feestdagen markeren bij trainingen
@@ -266,6 +267,20 @@ export function isVolledigIngevuld(b: Beschikbaarheid | undefined, sleutels: str
 
 export function kanNietOp(b: Beschikbaarheid | undefined, datum: string) {
   return !!b && b.nietKunnen.some((r) => r.van <= datum && datum <= r.tot)
+}
+
+/**
+ * Controle op tikfouten in de datums van een periode (bijv. het verkeerde
+ * jaar): geeft een waarschuwing of null. Blokkeert niets.
+ */
+export function periodeDatumWaarschuwing(van: string, tot: string, vandaag: string): string | null {
+  if (!van || !tot || van > tot) return null
+  const maanden = Math.round(((parseISODate(tot).getTime() - parseISODate(van).getTime()) / 86_400_000 + 1) / 30.4)
+  if (maanden > 8) {
+    return `Deze periode duurt ongeveer ${maanden} maanden (${van.slice(0, 4)} t/m ${tot.slice(0, 4)}). Klopt het jaar?`
+  }
+  if (tot < vandaag) return 'Deze periode ligt helemaal in het verleden. Klopt het jaar?'
+  return null
 }
 
 /** Nieuw id voor een losse training binnen een periode. */

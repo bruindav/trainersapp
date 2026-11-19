@@ -1,3 +1,4 @@
+// Fix: fix-13 — waarschuwing bij verkeerd jaar bij een nieuwe periode
 // Fix: fix-12 — per moment vaste trainers en een geldigheidsperiode instellen
 // Fix: fix-9 — trainingsmomenten inklapbaar
 // Fix: fix-5 — roosterperiodes en vaste trainingsmomenten
@@ -33,6 +34,7 @@ import {
   isVolledigIngevuld,
   keuzeKolommen,
   momentNaam,
+  periodeDatumWaarschuwing,
   trainingenInPeriode,
   type PeriodeSoort,
   type Trainingsmoment,
@@ -45,7 +47,7 @@ import {
   verwijderMoment,
   voegStandaardMomentenToe,
 } from '@/data/store'
-import { formatRange } from '@/lib/dates'
+import { formatRange, todayISO } from '@/lib/dates'
 
 export const Route = createFileRoute('/periodes/')({
   component: PeriodesPagina,
@@ -495,6 +497,11 @@ function NieuwePeriodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <Input id="p-tot" type="date" value={tot} onChange={(e) => setTot(e.target.value)} />
             </div>
           </div>
+          {periodeDatumWaarschuwing(van, tot, todayISO()) && (
+            <p role="alert" className="rounded-lg bg-nat-yellow/30 px-3 py-2 text-sm font-semibold">
+              {periodeDatumWaarschuwing(van, tot, todayISO())}
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="p-deadline">Beschikbaarheid invullen vóór (optioneel)</Label>
             <Input id="p-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />

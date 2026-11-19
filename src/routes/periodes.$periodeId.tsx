@@ -1,10 +1,11 @@
+// Fix: fix-13 — waarschuwing bij verkeerd jaar; jaartal bij feestdagen als de periode over de jaargrens loopt
 // Fix: fix-10 — naar indelen / rooster
 // Fix: fix-9 — inklapbare blokken
 // Fix: fix-8 — knop: testbeschikbaarheid voor testtrainers
 // Fix: fix-7 — beschikbaarheid via eigen pagina; feestdagen signaleren
 // Fix: fix-5 — één roosterperiode: instellingen, beschikbaarheid opgeven, wie kan wanneer
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, CalendarCheck, CalendarX, CircleCheck, FlaskConical, PartyPopper, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarCheck, CalendarX, CircleCheck, FlaskConical, PartyPopper, Plus, Save, Trash2 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -31,6 +32,7 @@ import {
   isVolledigIngevuld,
   keuzeKolommen,
   momentNaam,
+  periodeDatumWaarschuwing,
   nieuwLosId,
   trainingenInPeriode,
   type PeriodeStatus,
@@ -45,7 +47,7 @@ import {
   werkPeriodeBijRooster,
   wisTestbeschikbaarheid,
 } from '@/data/store'
-import { formatLong, formatRange, formatShort } from '@/lib/dates'
+import { formatLong, formatRange, formatShort, todayISO } from '@/lib/dates'
 
 export const Route = createFileRoute('/periodes/$periodeId')({
   component: PeriodePagina,
@@ -376,6 +378,11 @@ function Instellingen({ periode, trainingen }: { periode: Roosterperiode; traini
           <Button type="submit" variant="outline" disabled={bezig}>
             <Save aria-hidden /> Opslaan
           </Button>
+          {periodeDatumWaarschuwing(van, tot, todayISO()) && (
+            <p role="alert" className="flex items-center gap-2 rounded-lg bg-nat-yellow/30 px-3 py-2 text-sm font-semibold sm:col-span-2 lg:col-span-5">
+              <AlertTriangle className="size-4 shrink-0" aria-hidden /> {periodeDatumWaarschuwing(van, tot, todayISO())}
+            </p>
+          )}
         </form>
 
         {periode.soort === 'wekelijks' ? (
@@ -649,6 +656,8 @@ function Feestdagen({
     perDatum.set(t.datum, { naam: t.feestdag, aantal: (x?.aantal ?? 0) + 1 })
   })
   const data = [...perDatum.entries()].sort(([a], [b]) => a.localeCompare(b))
+  // Loopt de periode over meer dan één jaar, toon dan het jaartal erbij.
+  const metJaar = periode.van.slice(0, 4) !== periode.tot.slice(0, 4)
 
   return (
     <div className="space-y-2 rounded-xl bg-nat-yellow/15 p-4">
@@ -668,6 +677,7 @@ function Feestdagen({
                 <span className="text-sm">
                   <strong>
                     {DAGEN_KORT[dagVan(datum)]} {formatShort(datum)}
+                    {metJaar && ` ${datum.slice(0, 4)}`}
                   </strong>{' '}
                   · {f.naam}
                   {f.aantal > 1 && ` · ${f.aantal} trainingen`}

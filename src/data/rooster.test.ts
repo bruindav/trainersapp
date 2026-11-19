@@ -10,6 +10,7 @@ import {
   kanNietOp,
   keuzeKolommen,
   momentGeldigOp,
+  periodeDatumWaarschuwing,
   trainingenInPeriode,
   type Roosterperiode,
   type Trainingsmoment,
@@ -99,5 +100,14 @@ describe('geldigheid en vaste trainers', () => {
     const k4 = keuzeKolommen(periode, proef).find((k) => k.sleutel === 'm4')!
     expect(k4.vast).toEqual(['aa'])
     expect(k4.lang).toMatch(/t\/m/)
+  })
+})
+
+// Fix: fix-13 — tikfout in het jaar opmerken
+describe('periodeDatumWaarschuwing', () => {
+  it('waarschuwt bij een periode van anderhalf jaar of in het verleden, niet bij jan t/m jun', () => {
+    expect(periodeDatumWaarschuwing('2026-01-01', '2027-06-30', '2026-11-19')).toMatch(/Klopt het jaar/)
+    expect(periodeDatumWaarschuwing('2026-01-04', '2026-06-30', '2026-11-19')).toMatch(/verleden/)
+    expect(periodeDatumWaarschuwing('2027-01-04', '2027-06-30', '2026-11-19')).toBeNull()
   })
 })
