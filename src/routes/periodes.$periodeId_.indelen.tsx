@@ -1,8 +1,9 @@
+// Fix: fix-14 — tellers zijn klikbaar: toont meteen de trainingen met dat aandachtspunt
 // Fix: fix-12 — vaste trainers bovenaan en gemarkeerd; invallers
 // Fix: fix-11 — externe trainer en "zwemmers trainen zelf" in het indeelvenster
 // Fix: fix-10 — indelen door de coördinator; na publicatie het rooster voor iedereen
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { AlertTriangle, ArrowLeft, Minus, Plus, Send, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ChevronRight, Minus, Plus, Send, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -120,6 +121,8 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
   const [maand, setMaand] = useState(maanden[0] ?? '')
   const [alleenAandacht, setAlleenAandacht] = useState(false)
   const [alleenIk, setAlleenIk] = useState(false)
+  // Gekozen teller: toont alle trainingen met dit aandachtspunt, over alle maanden.
+  const [soortFilter, setSoortFilter] = useState<Waarschuwing['soort'] | null>(null)
   const [open, setOpen] = useState<PeriodeTraining | null>(null)
   const [voorstelVragen, setVoorstelVragen] = useState(false)
   const [publiceren, setPubliceren] = useState(false)
@@ -133,15 +136,14 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
 
   const tel = (soort: Waarschuwing['soort']) =>
     trainingen.filter((t) => waarschuwingen.get(t.key)?.some((w) => w.soort === soort)).length
-  const open_ = trainingen.reduce(
-    (n, t) => n + Math.max(0, nodigVoor(t, periode.indeling[t.key]) - (periode.indeling[t.key]?.trainers.length ?? 0)),
-    0,
-  )
+  const open_ = trainingen.reduce((n, t) => n + openPlekken(t, periode.indeling[t.key]), 0)
   const ingedeeld = Object.keys(periode.indeling).length > 0
 
   const zichtbaar = trainingen.filter(
     (t) =>
-      maandVan(t.datum) === maand &&
+      (soortFilter
+        ? waarschuwingen.get(t.key)?.some((w) => w.soort === soortFilter)
+        : maandVan(t.datum) === maand) &&
       (!alleenAandacht || waarschuwingen.get(t.key)?.some((w) => w.ernstig)) &&
       (!alleenIk || periode.indeling[t.key]?.trainers.includes(ikId)),
   )
@@ -197,11 +199,30 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
 
       {(magBewerken || open_ > 0) && (
         <div role="status" className="flex flex-wrap gap-2">
-          <Teller aantal={open_} tekst="open plekken" ernstig />
-          <Teller aantal={tel('toezicht')} tekst="zonder toezichthouder" ernstig />
-          <Teller aantal={tel('kanNiet')} tekst="iemand kan eigenlijk niet" ernstig />
-          <Teller aantal={tel('assistent')} tekst="assistent alleen" />
-          <Teller aantal={tel('feestdag')} tekst="op een feestdag" />
+          {(
+            [
+              ['open', open_, 'open plekken', true],
+              ['toezicht', tel('toezicht'), 'zonder toezichthouder', true],
+              ['kanNiet', tel('kanNiet'), 'iemand kan eigenlijk niet', true],
+              ['assistent', tel('assistent'), 'assistent alleen', false],
+              ['feestdag', tel('feestdag'), 'op een feestdag', false],
+            ] as const
+          ).map(([soort, aantal, tekst, ernstig]) => (
+            <Teller
+              key={soort}
+              aantal={aantal}
+              tekst={tekst}
+              ernstig={ernstig}
+              actief={soortFilter === soort}
+              onClick={() => {
+                setSoortFilter((x) => (x === soort ? null : soort))
+                // Naar de lijst, zodat je direct ziet welke het zijn.
+                requestAnimationFrame(() =>
+                  document.getElementById('indeling-lijst')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                )
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -211,11 +232,14 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
             <Button
               key={m}
               role="tab"
-              aria-selected={m === maand}
+              aria-selected={!soortFilter && m === maand}
               size="sm"
-              variant={m === maand ? 'default' : 'outline'}
+              variant={!soortFilter && m === maand ? 'default' : 'outline'}
               className="h-9 min-w-12 rounded-full"
-              onClick={() => setMaand(m)}
+              onClick={() => {
+                setMaand(m)
+                setSoortFilter(null)
+              }}
             >
               {MAAND_NAMEN[Number(m.slice(5, 7)) - 1]}
             </Button>
@@ -247,6 +271,17 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
         </span>
       </div>
 
+      <div id="indeling-lijst" className="scroll-mt-24" />
+      {soortFilter && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm">
+          <span className="flex-1">
+            Alle maanden · alleen trainingen met <strong>{FILTER_LABEL[soortFilter]}</strong>
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => setSoortFilter(null)}>
+            Toon alles
+          </Button>
+        </div>
+      )}
       {weken.size === 0 && <p className="text-muted-foreground">Geen trainingen om te tonen.</p>}
       {[...weken.entries()].map(([week, lijst]) => (
         <section key={week} aria-labelledby={`wk-${week}`} className="space-y-2">
@@ -336,16 +371,53 @@ function Rooster({ periode, magBewerken }: { periode: Roosterperiode; magBewerke
   )
 }
 
-function Teller({ aantal, tekst, ernstig = false }: { aantal: number; tekst: string; ernstig?: boolean }) {
+const FILTER_LABEL: Record<Waarschuwing['soort'], string> = {
+  open: 'een open plek',
+  toezicht: 'geen toezichthouder',
+  kanNiet: 'iemand die eigenlijk niet kan',
+  assistent: 'een assistent alleen',
+  alsHetMoet: "iemand op 'als het moet'",
+  feestdag: 'een feestdag',
+}
+
+function Teller({
+  aantal,
+  tekst,
+  ernstig = false,
+  actief,
+  onClick,
+}: {
+  aantal: number
+  tekst: string
+  ernstig?: boolean
+  actief: boolean
+  onClick: () => void
+}) {
+  const klasse = cn(
+    'inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold',
+    aantal === 0 ? 'bg-nat-green/15 text-foreground' : ernstig ? 'bg-destructive/15 text-foreground' : 'bg-nat-yellow/25 text-foreground',
+  )
+  if (aantal === 0) {
+    return (
+      <span className={klasse}>
+        <strong>{aantal}</strong> {tekst}
+      </span>
+    )
+  }
   return (
-    <span
+    <button
+      type="button"
+      aria-pressed={actief}
+      onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold',
-        aantal === 0 ? 'bg-nat-green/15 text-foreground' : ernstig ? 'bg-destructive/15 text-foreground' : 'bg-nat-yellow/25 text-foreground',
+        klasse,
+        'cursor-pointer outline-none transition-colors hover:brightness-95 focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none',
+        actief && 'ring-2 ring-foreground',
       )}
     >
       <strong>{aantal}</strong> {tekst}
-    </span>
+      <ChevronRight className={cn('size-4 transition-transform motion-reduce:transition-none', actief && 'rotate-90')} aria-hidden />
+    </button>
   )
 }
 
