@@ -1,3 +1,4 @@
+# Fix: fix-22 — testlink per fix-branch (Firebase-voorbeeldkanaal, 14 dagen geldig)
 # Fix: fix-2 — actions bijgewerkt naar Node 24-versies
 # Fix: fix-1 — bouwen, testen en deployen naar Firebase Hosting + Firestore-regels
 name: Deploy
@@ -78,3 +79,55 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="$SA"
           PROJECT_ID=$(node -e "console.log(require(process.env.GOOGLE_APPLICATION_CREDENTIALS).project_id)")
           pnpm exec firebase deploy --only hosting,firestore:rules --project "$PROJECT_ID" --non-interactive
+
+  # Testlink: elke fix-N-branch komt op een eigen voorbeeldadres (zelfde database).
+  # De regels gaan mee, zodat nieuwe functies in de test werken; ze zijn steeds
+  # uitbreidingen, en na het mergen zet main ze opnieuw.
+  voorbeeld:
+    needs: test
+    if: startsWith(github.ref, 'refs/heads/fix-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: E-mail hoofdtrainer invullen in firestore.rules
+        env:
+          HOOFDTRAINER_EMAIL: ${{ vars.HOOFDTRAINER_EMAIL }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const email = (process.env.HOOFDTRAINER_EMAIL || "").trim().toLowerCase();
+            if (!email) process.exit(0);
+            if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) { console.error("Ongeldig HOOFDTRAINER_EMAIL"); process.exit(1); }
+            const r = fs.readFileSync("firestore.rules", "utf8");
+            fs.writeFileSync("firestore.rules", r.replace("__HOOFDTRAINER_EMAIL__", email));
+          '
+      - name: Testlink maken
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          KANAAL: ${{ github.ref_name }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::warning::Secret FIREBASE_SERVICE_ACCOUNT ontbreekt; geen testlink."
+            exit 0
+          fi
+          SA="$RUNNER_TEMP/sa.json"
+          trap 'rm -f "$SA"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          PROJECT_ID=$(node -e "console.log(require(process.env.GOOGLE_APPLICATION_CREDENTIALS).project_id)")
+          pnpm exec firebase deploy --only firestore:rules --project "$PROJECT_ID" --non-interactive
+          pnpm exec firebase hosting:channel:deploy "$KANAAL" --only natutrecht-trainersapp --expires 14d \
+            --project "$PROJECT_ID" --non-interactive --json > "$RUNNER_TEMP/kanaal.json"
+          URL=$(node -e 'const r=require(process.argv[1]).result; console.log(Object.values(r).map(x=>x.url).join(" "))' "$RUNNER_TEMP/kanaal.json")
+          echo "Testlink: $URL"
+          echo "### Testlink $KANAAL" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
