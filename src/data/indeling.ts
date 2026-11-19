@@ -1,3 +1,4 @@
+// Fix: fix-15 — ritme voor vaste trainers; een oude 'nee' van een vaste trainer telt niet
 // Fix: fix-12 — vaste trainers eerst; anderen alleen als invaller
 // Fix: fix-11 — externe trainer, zwemmers trainen zelf, open plekken; nodig altijd opgeslagen
 // Fix: fix-10 — indelen: voorstel, waarschuwingen en tellingen (pure functies, getest)
@@ -82,6 +83,7 @@ export function maakVoorstel(
   const uit: IndelingMap = {}
   const totaal = new Map<string, number>()
   const perMaand = new Map<string, number>()
+  const ritmeTeller = new Map<string, number>()
   const actief = trainers.filter((t) => t.rol !== 'Geen training')
 
   for (const t of trainingen) {
@@ -94,13 +96,25 @@ export function maakVoorstel(
       perMaand.set(`${tr.id}|${maand}`, (perMaand.get(`${tr.id}|${maand}`) ?? 0) + 1)
     }
 
-    // Vaste trainers staan er altijd, tenzij ze die dag niet kunnen.
-    // Hun maximum per maand telt hier niet: de training is van hen.
-    for (const id of t.vasteTrainers ?? []) {
+    // Vaste trainers staan er altijd, tenzij ze die dag niet kunnen (alleen de
+    // opgegeven datums tellen; een oude keuze voor dit moment niet). Hun
+    // maximum per maand telt hier niet: de training is van hen.
+    // Zijn er meer vaste trainers dan nodig, dan wisselen ze in blokken van
+    // `ritmeWeken` trainingen (standaard 2); bij afwezigheid neemt de ander het over.
+    const vaste = t.vasteTrainers ?? []
+    let volgorde = vaste
+    if (vaste.length > nodig && nodig > 0) {
+      const n = ritmeTeller.get(t.keuzeSleutel) ?? 0
+      ritmeTeller.set(t.keuzeSleutel, n + 1)
+      const blok = Math.floor(n / Math.max(1, t.ritmeWeken ?? 2))
+      const start = (blok * nodig) % vaste.length
+      volgorde = [...vaste.slice(start), ...vaste.slice(0, start)]
+    }
+    for (const id of volgorde) {
       if (gekozen.length >= nodig) break
       const tr = actief.find((x) => x.id === id)
       const b = beschikbaarheid[id]
-      if (!tr || b?.keuzes[t.keuzeSleutel] === 'nee' || kanNietOp(b, t.datum)) continue
+      if (!tr || kanNietOp(b, t.datum)) continue
       gekozen.push(tr)
       tel(tr)
     }
@@ -178,7 +192,8 @@ export function controleer(
   }
   for (const x of ingedeeld) {
     const b = beschikbaarheid[x.id]
-    const k = b?.keuzes[t.keuzeSleutel]
+    const vast = t.vasteTrainers?.includes(x.id) ?? false
+    const k = vast ? 'graag' : b?.keuzes[t.keuzeSleutel]
     if (k === 'nee' || kanNietOp(b, t.datum)) {
       uit.push({ soort: 'kanNiet', tekst: `${x.naam.split(' ')[0]} kan eigenlijk niet`, ernstig: true })
     } else if (k === 'kan' && !t.vasteTrainers?.length) {

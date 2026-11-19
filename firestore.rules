@@ -1,3 +1,4 @@
+// Fix: fix-15 — trainingsmomenten: ritmeWeken (1–8).
 // Fix: fix-12 — trainingsmomenten: vaste trainers en geldigheidsperiode.
 // Fix: fix-11 — trainers: vrijgeven, overnemen, ruilen na publicatie; ruilverzoeken; wijzigingslog.
 // Fix: fix-10 — indeling en publicatie op roosterperiodes.
@@ -220,7 +221,9 @@ service cloud.firestore {
     match /trainingsmomenten/{id} {
       allow read: if isTrainer();
       allow create, update: if isCoordinator()
-        && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde', 'vasteTrainers', 'geldigVan', 'geldigTot'])
+        && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde', 'vasteTrainers', 'geldigVan', 'geldigTot', 'ritmeWeken'])
+        && (!('ritmeWeken' in request.resource.data)
+            || (request.resource.data.ritmeWeken is int && request.resource.data.ritmeWeken >= 1 && request.resource.data.ritmeWeken <= 8))
         // fix-12: vaste trainers (hoogstens 6 uid's) en een optionele geldigheidsperiode.
         && (!('vasteTrainers' in request.resource.data)
             || (request.resource.data.vasteTrainers is list && request.resource.data.vasteTrainers.size() <= 6))

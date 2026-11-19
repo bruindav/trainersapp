@@ -1,3 +1,4 @@
+// Fix: fix-15 — een vaste trainer is altijd 'V', ook met een oude 'nee'
 // Fix: fix-12 — vaste trainer zichtbaar als 'V', invallers als 'I'
 // Fix: fix-9 — compactere tabel op mobiel (vaste naamkolom, korte namen)
 // Fix: fix-7 — formulier verhuisd naar eigen pagina; coördinator vult in via 'Wie kan wanneer'
@@ -183,7 +184,7 @@ export function WieKanWanneer({ periode }: { periode: Roosterperiode }) {
                     </span>
                   </th>
                   {kolommen.map((k) => {
-                    const vast = k.vast.includes(t.id) && b?.keuzes[k.sleutel] !== 'nee'
+                    const vast = k.vast.includes(t.id)
                     const inval = k.vast.length > 0 && !vast && b?.keuzes[k.sleutel] === 'kan'
                     const c = vast
                       ? { tekst: 'V', label: 'vaste trainer', klasse: 'bg-nat-green text-white' }

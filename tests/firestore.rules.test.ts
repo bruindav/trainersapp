@@ -1,3 +1,4 @@
+// Fix: fix-15 — regels voor ritmeWeken
 // Fix: fix-12 — regels voor vaste trainers en geldigheid van momenten
 // Fix: fix-11 — vrijgeven, overnemen, ruilen
 // Fix: fix-10 — indeling
@@ -348,6 +349,9 @@ describe('roosterperiodes en beschikbaarheid', () => {
     await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm5'), { ...moment, geldigVan: '2027-05-01', geldigTot: '2027-04-30' }))
     await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm6'), { ...moment, geldigTot: 'april' }))
     await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm7'), { ...moment, vasteTrainers: 'aaldert' }))
+    // fix-15: ritme
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm8'), { ...moment, vasteTrainers: ['a', 'd'], ritmeWeken: 2 }))
+    await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm9'), { ...moment, ritmeWeken: 0 }))
     await assertSucceeds(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p1'), periode('concept')))
     await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p2'), periode('concept')))
     await assertFails(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p3'), { ...periode('concept'), status: 'klaar' }))

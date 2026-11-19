@@ -1,3 +1,4 @@
+// Fix: fix-15 — vaste trainer: oude keuze telt niet
 // Fix: fix-14 — tellers zijn klikbaar: toont meteen de trainingen met dat aandachtspunt
 // Fix: fix-12 — vaste trainers bovenaan en gemarkeerd; invallers
 // Fix: fix-11 — externe trainer en "zwemmers trainen zelf" in het indeelvenster
@@ -581,7 +582,8 @@ function IndelenDialog({
       const kanNiet = kanNietOp(b, t.datum)
       const inMaand = tel.get(`${tr.id}|${maand}`) ?? 0
       const vast = t.vasteTrainers?.includes(tr.id) ?? false
-      return { tr, keuze: (kanNiet ? 'nee' : keuze) as Keuze | 'onbekend', kanNiet, inMaand, max: b?.maxPerMaand ?? null, vast }
+      // Voor een vaste trainer tellen alleen de opgegeven datums, geen oude keuze.
+      return { tr, keuze: (kanNiet ? 'nee' : vast ? 'graag' : keuze) as Keuze | 'onbekend', kanNiet, inMaand, max: b?.maxPerMaand ?? null, vast }
     })
     .sort(
       (a, b) =>
@@ -721,7 +723,7 @@ function IndelenDialog({
                     <span className="block text-xs text-muted-foreground">
                       {kanNiet
                         ? 'Kan niet op deze datum'
-                        : vast && keuze === 'onbekend'
+                        : vast
                           ? 'vaste trainer'
                           : !vast && t.vasteTrainers?.length && keuze === 'kan'
                             ? 'invaller'

@@ -1,3 +1,4 @@
+// Fix: fix-15 — ritme (wisselen per zoveel weken) voor vaste trainers
 // Fix: fix-13 — waarschuwing bij een verdachte periode (verkeerd jaar)
 // Fix: fix-12 — vaste trainers per moment en een geldigheidsperiode per moment
 // Fix: fix-10 — indeling en publicatie op de periode
@@ -28,6 +29,8 @@ export interface Trainingsmoment {
   /** Alleen geldig vanaf / tot en met deze datum (bijv. een proef van jan t/m apr). */
   geldigVan?: string
   geldigTot?: string
+  /** Meer vaste trainers dan nodig: om de hoeveel trainingen ze wisselen (standaard 2). */
+  ritmeWeken?: number
 }
 
 /** Geldt dit moment op deze datum (los van de dag van de week)? */
@@ -142,6 +145,7 @@ export interface PeriodeTraining {
   feestdag?: string
   /** Vaste trainers van het moment; anderen vallen alleen in. */
   vasteTrainers?: string[]
+  ritmeWeken?: number
 }
 
 /** Dagnummer met maandag = 0. */
@@ -212,6 +216,7 @@ export function trainingenInPeriode(
         omschrijving: '',
         feestdag: feestdag(d),
         ...(m.vasteTrainers?.length ? { vasteTrainers: m.vasteTrainers } : {}),
+        ...(m.ritmeWeken ? { ritmeWeken: m.ritmeWeken } : {}),
       })
     }
   }

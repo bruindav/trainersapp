@@ -100,3 +100,22 @@ describe('vaste trainers', () => {
     expect(controleer(vast('2027-01-10'), v['2027-01-10|m1'], trainers, besch).map((w) => w.soort)).not.toContain('alsHetMoet')
   })
 })
+
+// Fix: fix-15 — ritme: vaste trainers wisselen per 2 weken, ook bij een oude 'nee'
+describe('ritme van vaste trainers', () => {
+  const zondagen = ['2027-01-10', '2027-01-17', '2027-01-24', '2027-01-31', '2027-02-07', '2027-02-14']
+  const tr = (d: string, ritme?: number): PeriodeTraining => ({ ...training(d, 1), vasteTrainers: ['aa', 'dv'], ritmeWeken: ritme })
+  const trainers = [T('aa'), T('dv'), T('y')]
+  const wie = (v: ReturnType<typeof maakVoorstel>) => zondagen.map((d) => v[`${d}|m1`].trainers[0])
+  it('wisselt per 2 weken; een oude "nee" van een vaste trainer telt niet', () => {
+    const v = maakVoorstel(zondagen.map((d) => tr(d)), trainers, { aa: B('aa', 'nee'), y: B('y', 'kan') })
+    expect(wie(v)).toEqual(['aa', 'aa', 'dv', 'dv', 'aa', 'aa'])
+  })
+  it('bij afwezigheid neemt de andere vaste trainer het over, daarna gaat het ritme door', () => {
+    const besch = { dv: B('dv', 'graag', null, [{ van: '2027-01-24', tot: '2027-01-24' }]) }
+    const v = maakVoorstel(zondagen.map((d) => tr(d, 3)), trainers, besch)
+    expect(wie(v)).toEqual(['aa', 'aa', 'aa', 'dv', 'dv', 'dv'])
+    const v2 = maakVoorstel(zondagen.map((d) => tr(d)), trainers, besch)
+    expect(wie(v2)).toEqual(['aa', 'aa', 'aa', 'dv', 'aa', 'aa'])
+  })
+})

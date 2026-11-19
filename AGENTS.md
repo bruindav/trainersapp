@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-15 — ritme voor vaste trainers -->
 <!-- Fix: fix-12 — vaste trainers en geldigheidsperiode per moment -->
 <!-- Fix: fix-11 — Mijn rooster, ruilen, wijzigingslog -->
 
@@ -187,7 +188,7 @@ pnpm preview       # Preview the production build
 - **Jaarplan**: on first-time setup `STANDAARD_JAARPLAN` (season 2026–2027, goal EuroGames Cardiff 14–17 Jul 2027) is written to `jaarplan/huidig`; competition dates other than EuroGames are "onder voorbehoud".
 - **Logged-in trainer** = Firebase uid (`huidigeTrainerId`).
 - **Rol vs. taken** (fix-3): `rol` says whether someone gives training (`Geen training` = e.g. a coordinator who doesn't coach; excluded from roster and training pickers). Tasks are separate flags: `coordinator` (schedules; may do everything), `jaarplanBeheer` (edits/publishes the jaarplan), `teamBeheer` (delegated by the coordinator: invite and edit members, but never coordinators or the heavy tasks `coordinator`/`teamBeheer`), `toezichthouder` (pool-supervisor qualification). A coordinator can't remove their own coordinator flag or delete themselves, so one always remains. Legacy docs with `rol: 'Hoofdtrainer'` count as coordinator and are migrated on that user's next login.
-- **Vaste trainers** (fix-12): a moment can have fixed trainers (e.g. Sunday 11:00). In the availability form they don't choose for that moment (stored as `graag`); others only choose "Ik kan invallen" (stored as `kan`) or "Nee". `maakVoorstel` places available fixed trainers first (ignoring their monthly max) and fills only the remaining slots. A moment can be limited to a date range (`geldigVan`/`geldigTot`, e.g. a trial Jan–Apr); outside it no trainings are generated and periods that never overlap don't ask for it.
+- **Vaste trainers** (fix-12): a moment can have fixed trainers (e.g. Sunday 11:00). In the availability form they don't choose for that moment (stored as `graag`); others only choose "Ik kan invallen" (stored as `kan`) or "Nee". `maakVoorstel` places available fixed trainers first (ignoring their monthly max) and fills only the remaining slots. A moment can be limited to a date range (`geldigVan`/`geldigTot`, e.g. a trial Jan–Apr); outside it no trainings are generated and periods that never overlap don't ask for it. With more fixed trainers than places (fix-15) they alternate in blocks of `ritmeWeken` trainings (default 2); if one can't, another fixed trainer takes it and the rhythm continues. For fixed trainers only their `nietKunnen` dates count — an old choice for that moment is ignored.
 - **Toezicht**: every training needs a supervisor — a qualified trainer or someone from `toezichthouders`, also when swimmers train without a trainer.
 - **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
 - **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.

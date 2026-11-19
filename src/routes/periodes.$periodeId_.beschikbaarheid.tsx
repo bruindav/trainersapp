@@ -1,3 +1,4 @@
+// Fix: fix-15 — vaste trainer: altijd 'graag' voor de eigen vaste training
 // Fix: fix-12 — vaste training: vaste trainer hoeft niets te kiezen, anderen alleen 'invallen' of 'nee'
 // Fix: fix-7 — eigen, rustige pagina om beschikbaarheid op te geven (ook namens iemand, door de coördinator)
 import { Link, createFileRoute } from '@tanstack/react-router'
@@ -136,7 +137,7 @@ function Formulier({
   // Een vaste trainer staat bij de eigen vaste training standaard op 'graag'.
   const [keuzes, setKeuzes] = useState<Record<string, Keuze>>(() => {
     const k = { ...(bestaand?.keuzes ?? {}) }
-    for (const kol of kolommen) if (kol.vast.includes(trainer.id) && !k[kol.sleutel]) k[kol.sleutel] = 'graag'
+    for (const kol of kolommen) if (kol.vast.includes(trainer.id)) k[kol.sleutel] = 'graag'
     return k
   })
   const [max, setMax] = useState<number | null>(bestaand?.maxPerMaand ?? null)

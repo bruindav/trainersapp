@@ -1,3 +1,4 @@
+// Fix: fix-15 — ritme voor vaste trainers instellen
 // Fix: fix-13 — waarschuwing bij verkeerd jaar bij een nieuwe periode
 // Fix: fix-12 — per moment vaste trainers en een geldigheidsperiode instellen
 // Fix: fix-9 — trainingsmomenten inklapbaar
@@ -216,6 +217,8 @@ function MomentenKaart({ magBewerken }: { magBewerken: boolean }) {
                     <p className="flex items-center gap-1 text-sm">
                       <Lock className="size-3.5 text-nat-green" aria-hidden />
                       Vast: {m.vasteTrainers.map((id) => trainerById(id)?.naam ?? 'Oud-trainer').join(', ')}
+                      {m.vasteTrainers.length > m.trainersNodig &&
+                        ` · wisselen ${(m.ritmeWeken ?? 2) === 1 ? 'elke week' : `per ${m.ritmeWeken ?? 2} weken`}`}
                     </p>
                   ) : null}
                 </div>
@@ -315,6 +318,7 @@ function MomentDialog({ moment: m, onClose }: { moment: Trainingsmoment; onClose
   const [vast, setVast] = useState<string[]>(m.vasteTrainers ?? [])
   const [van, setVan] = useState(m.geldigVan ?? '')
   const [tot, setTot] = useState(m.geldigTot ?? '')
+  const [ritme, setRitme] = useState(m.ritmeWeken ?? 2)
   const [bezig, setBezig] = useState(false)
   const fout = van && tot && van > tot ? 'De einddatum ligt vóór de begindatum.' : ''
 
@@ -323,7 +327,13 @@ function MomentDialog({ moment: m, onClose }: { moment: Trainingsmoment; onClose
     if (fout) return
     setBezig(true)
     try {
-      await bewaarMoment({ ...m, vasteTrainers: vast, geldigVan: van || undefined, geldigTot: tot || undefined })
+      await bewaarMoment({
+        ...m,
+        vasteTrainers: vast,
+        geldigVan: van || undefined,
+        geldigTot: tot || undefined,
+        ritmeWeken: vast.length > m.trainersNodig ? ritme : undefined,
+      })
       toast.success(`${momentNaam(m)} bijgewerkt`)
       onClose()
     } catch {
@@ -362,9 +372,32 @@ function MomentDialog({ moment: m, onClose }: { moment: Trainingsmoment; onClose
               ))}
             </ul>
             {vast.length > m.trainersNodig && (
-              <p className="text-sm text-muted-foreground">
-                Let op: er zijn meer vaste trainers ({vast.length}) dan nodig ({m.trainersNodig}); het voorstel neemt de eersten.
-              </p>
+              <div className="space-y-2 rounded-lg bg-muted p-3">
+                <p className="text-sm font-semibold" id="ritme-label">
+                  Wisselen om de hoeveel weken?
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Er zijn {vast.length} vaste trainers voor {m.trainersNodig === 1 ? '1 plek' : `${m.trainersNodig} plekken`}. Het
+                  voorstel laat ze om de beurt dit aantal weken achter elkaar trainen. Kan iemand een keer niet, dan neemt een
+                  andere vaste trainer het over.
+                </p>
+                <div role="radiogroup" aria-labelledby="ritme-label" className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4].map((n) => (
+                    <Button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={ritme === n}
+                      size="sm"
+                      variant={ritme === n ? 'default' : 'outline'}
+                      className="h-9 rounded-full"
+                      onClick={() => setRitme(n)}
+                    >
+                      {n === 1 ? 'Elke week' : `${n} weken`}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             )}
           </fieldset>
 
