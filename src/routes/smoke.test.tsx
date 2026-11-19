@@ -1,3 +1,4 @@
+// Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-1 — rooktest: elke pagina rendert met data uit de (gemockte) store
 import { act, render, screen } from '@testing-library/react'
@@ -15,6 +16,16 @@ const DATA: AppData = {
   ],
   uitnodigingen: [],
   toezichthouders: [],
+  trainingsmomenten: [
+    { id: 'm1', dag: 1, start: '21:00', eind: '22:00', locatie: 'De Kwakel', trainersNodig: 2, actief: true, volgorde: 1 },
+  ],
+  roosterperiodes: [
+    {
+      id: 'p1', naam: 'Hoofdseizoen deel 2', soort: 'wekelijks', van: '2027-01-04', tot: '2027-01-31',
+      status: 'beschikbaarheid', deadline: '2026-12-15', momentIds: ['m1'], losseTrainingen: [], vervallenData: [],
+    },
+  ],
+  beschikbaarheid: { p1: { b: { trainerId: 'b', keuzes: { m1: 'graag' }, maxPerMaand: 2, nietKunnen: [] } } },
   afwezigheden: [],
   roosterWijzigingen: {},
   trainingen: [
@@ -60,6 +71,9 @@ const PAGINAS: [string, RegExp][] = [
   ['/jaarplan', /Jaarplan|Seizoen/],
   ['/trainingen', /getraind/],
   ['/team', /^Team$/],
+  ['/periodes', /^Roosterperiodes$/],
+  ['/periodes/p1', /^Hoofdseizoen deel 2$/],
+  ['/periodes/bestaat-niet', /^Periode niet gevonden$/],
 ]
 
 describe('pagina’s renderen', () => {

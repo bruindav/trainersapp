@@ -1,3 +1,4 @@
+// Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-2 — testtrainer-id's
 // Fix: fix-1 — logica van rooster-rotatie en hulpfuncties
@@ -15,6 +16,9 @@ function data(over: Partial<AppData> = {}): AppData {
     ],
     uitnodigingen: [],
     toezichthouders: [],
+    trainingsmomenten: [],
+    roosterperiodes: [],
+    beschikbaarheid: {},
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],

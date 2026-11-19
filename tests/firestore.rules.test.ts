@@ -1,3 +1,4 @@
+// Fix: fix-5 — momenten, periodes, beschikbaarheid
 // Fix: fix-3 — coördinator, taken, toezichthouders, migratie oude hoofdtrainer
 // Fix: fix-2 — testtrainers
 // Fix: fix-1 — tests voor firestore.rules (pnpm test:rules)
@@ -317,6 +318,52 @@ describe('rooster, trainingen en jaarplan', () => {
     )
     await assertSucceeds(
       setDoc(doc(als(TRAINER), 'afwezigheden', 'a2'), { trainerId: TRAINER.uid, van: '2026-12-01', tot: '2026-12-02', reden: 'Vakantie' }),
+    )
+  })
+})
+
+describe('roosterperiodes en beschikbaarheid', () => {
+  beforeEach(standaardTeam)
+  const moment = { dag: 1, start: '21:00', eind: '22:00', locatie: 'De Kwakel', trainersNodig: 2, actief: true, volgorde: 1 }
+  const periode = (status: string) => ({
+    naam: 'Deel 2', soort: 'wekelijks', van: '2027-01-04', tot: '2027-07-04', status, deadline: '2026-12-15',
+    momentIds: ['m1'], losseTrainingen: [], vervallenData: [], versie: 0,
+  })
+  const besch = (door: string) => ({
+    keuzes: { m1: 'graag' }, maxPerMaand: 3, nietKunnen: [{ van: '2027-02-14', tot: '2027-02-21' }],
+    bijgewerktOp: serverTimestamp(), bijgewerktDoor: door,
+  })
+
+  it('alleen de coördinator beheert momenten en periodes', async () => {
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm1'), moment))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingsmomenten', 'm2'), moment))
+    await assertFails(setDoc(doc(als(HOOFD), 'trainingsmomenten', 'm3'), { ...moment, start: '25:00' }))
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p1'), periode('concept')))
+    await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p2'), periode('concept')))
+    await assertFails(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p3'), { ...periode('concept'), status: 'klaar' }))
+    await assertSucceeds(getDoc(doc(als(TRAINER), 'roosterperiodes', 'p1')))
+  })
+  it('trainer vult alleen de eigen beschikbaarheid in, en alleen in de juiste fase', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'roosterperiodes', 'open'), periode('beschikbaarheid'))
+      await setDoc(doc(db, 'roosterperiodes', 'dicht'), periode('indelen'))
+    })
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'roosterperiodes', 'open', 'beschikbaarheid', TRAINER.uid), besch(TRAINER.uid)))
+    await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'open', 'beschikbaarheid', HOOFD.uid), besch(TRAINER.uid)))
+    await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'dicht', 'beschikbaarheid', TRAINER.uid), besch(TRAINER.uid)))
+    // De coördinator mag voor een ander invullen, ook na de deadline.
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'roosterperiodes', 'dicht', 'beschikbaarheid', TRAINER.uid), besch(HOOFD.uid)))
+    // Iedereen ziet ieders beschikbaarheid; een vreemde niet.
+    await assertSucceeds(getDoc(doc(als(TRAINER), 'roosterperiodes', 'dicht', 'beschikbaarheid', TRAINER.uid)))
+    await assertFails(getDoc(doc(als({ uid: 'vreemd', email: 'v@x.nl' }), 'roosterperiodes', 'dicht', 'beschikbaarheid', TRAINER.uid)))
+  })
+  it('ongeldige beschikbaarheid wordt geweigerd', async () => {
+    await seed(async (db) => setDoc(doc(db, 'roosterperiodes', 'open'), periode('beschikbaarheid')))
+    await assertFails(
+      setDoc(doc(als(TRAINER), 'roosterperiodes', 'open', 'beschikbaarheid', TRAINER.uid), { ...besch(TRAINER.uid), maxPerMaand: 99 }),
+    )
+    await assertFails(
+      setDoc(doc(als(TRAINER), 'roosterperiodes', 'open', 'beschikbaarheid', TRAINER.uid), { ...besch(TRAINER.uid), telefoon: '06' }),
     )
   })
 })

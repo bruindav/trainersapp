@@ -1,3 +1,4 @@
+<!-- Fix: fix-5 — roosterperiodes en beschikbaarheid -->
 <!-- Fix: fix-3 — rollen en taken; nieuw roosterontwerp -->
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
@@ -44,11 +45,13 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── app-shell.tsx     # Header (logo, nav, account menu, mobile Sheet), footer, PageHeader
 │   │   ├── auth-schermen.tsx # Login, email-link confirm, first-time setup, no-access, loading screens
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
+│   │   ├── rooster-onderdelen.tsx # Status badge/steps, availability form, who-can-when grid, reminder banner
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
 │   ├── data
 │   │   ├── fixtures.ts       # Domain types, fixed club data (sessies, groepen), default jaarplan, AppData
 │   │   ├── auth.ts           # Firebase Auth state, access check, invite redemption, first-time setup
+│   │   ├── rooster.ts        # Roster domain: moments, periods, availability, trainingenInPeriode()
 │   │   └── store.ts          # useSyncExternalStore store fed by Firestore onSnapshot; selectors + write actions
 │   ├── firebase-config.ts    # Public Firebase web config (fill in per project)
 │   ├── lib
@@ -61,6 +64,8 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── rooster.tsx       # Weekly roster grid, assign dialog, 4-week distribution (?week=YYYY-MM-DD)
 │   │   ├── jaarplan.tsx      # Season timeline, periods (edit = coordinator or jaarplanBeheer), publish dialog
 │   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
+│   │   ├── periodes.index.tsx      # Roster periods list, fixed training moments, new-period dialog
+│   │   ├── periodes.$periodeId.tsx # One period: status flow, settings, my availability, who-can-when grid
 │   │   └── team.tsx          # Team: roles + tasks, invites, supervisors group, test trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
 ```
@@ -74,6 +79,9 @@ This document describes the project for developers and AI agents working on this
 | `trainers/{uid}` | naam, initialen, kleur, rol (`Trainer`/`Assistent-trainer`/`Geen training`), specialiteit, email, taken `coordinator`/`jaarplanBeheer`/`teamBeheer`/`toezichthouder` (bool), `test` | coordinator; teamBeheer (not for coordinators / heavy tasks); self only via setup or invite |
 | `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp + the four task flags | coordinator / teamBeheer (invitee may delete own on redeem) |
 | `toezichthouders/{id}` | naam, notitie — the club's separate group of supervisors (no accounts yet) | coordinator / teamBeheer |
+| `trainingsmomenten/{id}` | dag (0=ma…6=zo), start, eind, locatie, trainersNodig, actief, volgorde | coordinator |
+| `roosterperiodes/{id}` | naam, soort (`wekelijks`/`los`), van, tot, status (`concept`→`beschikbaarheid`→`indelen`→`gepubliceerd`/`afgesloten`), deadline, momentIds, losseTrainingen[], vervallenData[] | coordinator |
+| `roosterperiodes/{id}/beschikbaarheid/{uid}` | keuzes {sleutel: graag/kan/nee}, maxPerMaand, nietKunnen [{van,tot}] — readable by all trainers | own while status = beschikbaarheid; coordinator always |
 | `config/setup` | hoofdtrainerUid (= first coordinator) — exists once the app is set up | first user, once |
 | `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
 | `afwezigheden/{id}` | trainerId, van, tot, reden | own or coordinator |

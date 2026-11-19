@@ -1,7 +1,8 @@
+// Fix: fix-5 — navigatie-item Periodes
 // Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
-import { CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
+import { CalendarCheck, CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ReactNode } from 'react'
 
@@ -24,6 +25,7 @@ import { TrainerAvatar } from './trainer-avatar'
 const NAV = [
   { to: '/', label: 'Overzicht', icon: LayoutDashboard },
   { to: '/rooster', label: 'Rooster', icon: Waves },
+  { to: '/periodes', label: 'Periodes', icon: CalendarCheck },
   { to: '/jaarplan', label: 'Jaarplan', icon: CalendarRange },
   { to: '/trainingen', label: 'Trainingen', icon: ClipboardList },
   { to: '/team', label: 'Team', icon: Users },

@@ -1,3 +1,4 @@
+// Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Fix: fix-3 — coördinator, taken (jaarplan, teambeheer, toezicht) en groep toezichthouders.
 // Fix: fix-2 — testtrainers (zonder account) toegestaan voor de hoofdtrainer.
 // Fix: fix-1 — beveiligingsregels voor de NatUtrecht Trainersapp.
@@ -202,6 +203,73 @@ service cloud.firestore {
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
         && tekst(request.resource.data.notitie, 200);
       allow delete: if magTeam();
+    }
+
+    // --- Nieuw rooster (fix-5): momenten, periodes, beschikbaarheid ---------
+
+    function isTijd(t) {
+      return t is string && t.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+    function periodePad(pid) {
+      return /databases/$(database)/documents/roosterperiodes/$(pid);
+    }
+
+    match /trainingsmomenten/{id} {
+      allow read: if isTrainer();
+      allow create, update: if isCoordinator()
+        && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde'])
+        && request.resource.data.dag is int && request.resource.data.dag >= 0 && request.resource.data.dag <= 6
+        && isTijd(request.resource.data.start) && isTijd(request.resource.data.eind)
+        && request.resource.data.start < request.resource.data.eind
+        && tekst(request.resource.data.locatie, 80)
+        && request.resource.data.trainersNodig is int
+        && request.resource.data.trainersNodig >= 1 && request.resource.data.trainersNodig <= 6
+        && request.resource.data.actief is bool
+        && request.resource.data.volgorde is int;
+      allow delete: if isCoordinator();
+    }
+
+    match /roosterperiodes/{pid} {
+      allow read: if isTrainer();
+      allow create, update: if isCoordinator()
+        && request.resource.data.keys().hasOnly([
+             'naam', 'soort', 'van', 'tot', 'status', 'deadline', 'momentIds', 'losseTrainingen',
+             'vervallenData', 'versie', 'aangemaaktOp'])
+        && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
+        && request.resource.data.soort in ['wekelijks', 'los']
+        && isDatum(request.resource.data.van) && isDatum(request.resource.data.tot)
+        && request.resource.data.van <= request.resource.data.tot
+        && request.resource.data.status in ['concept', 'beschikbaarheid', 'indelen', 'gepubliceerd', 'afgesloten']
+        && (request.resource.data.deadline == null || isDatum(request.resource.data.deadline))
+        && request.resource.data.momentIds is list && request.resource.data.momentIds.size() <= 20
+        && request.resource.data.losseTrainingen is list && request.resource.data.losseTrainingen.size() <= 100
+        && request.resource.data.vervallenData is list && request.resource.data.vervallenData.size() <= 200;
+      allow delete: if isCoordinator() && resource.data.status == 'concept';
+
+      // Iedereen ziet ieders beschikbaarheid (besluit 19 nov). Een trainer vult
+      // alleen de eigen in, zolang de periode beschikbaarheid opvraagt; de
+      // coördinator mag altijd (bijv. na rondbellen).
+      match /beschikbaarheid/{uid} {
+        allow read: if isTrainer();
+        allow create, update: if isTrainer()
+          && request.resource.data.keys().hasOnly(['keuzes', 'maxPerMaand', 'nietKunnen', 'bijgewerktOp', 'bijgewerktDoor'])
+          && request.resource.data.keuzes is map && request.resource.data.keuzes.size() <= 100
+          && (request.resource.data.maxPerMaand == null
+              || (request.resource.data.maxPerMaand is int
+                  && request.resource.data.maxPerMaand >= 0 && request.resource.data.maxPerMaand <= 31))
+          && request.resource.data.nietKunnen is list && request.resource.data.nietKunnen.size() <= 30
+          && request.resource.data.bijgewerktOp == request.time
+          && request.resource.data.bijgewerktDoor == request.auth.uid
+          && exists(trainerPad(uid))
+          && (isCoordinator()
+              || (uid == request.auth.uid && get(periodePad(pid)).data.status == 'beschikbaarheid'));
+        allow delete: if isCoordinator();
+      }
+    }
+
+    // Collection-group-query op alle beschikbaarheid (voor overzichten).
+    match /{pad=**}/beschikbaarheid/{uid} {
+      allow read: if isTrainer();
     }
 
     // --- Rooster ------------------------------------------------------------

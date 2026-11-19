@@ -1,3 +1,4 @@
+// Fix: fix-5 — melding: beschikbaarheid invullen
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { Link, createFileRoute } from '@tanstack/react-router'
 import {
@@ -14,6 +15,7 @@ import {
   Waves,
 } from 'lucide-react'
 
+import { BeschikbaarheidMelding } from '@/components/rooster-onderdelen'
 import { TrainerAvatar } from '@/components/trainer-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -134,6 +136,7 @@ function Overzicht() {
       </section>
 
       <div className="mx-auto max-w-content space-y-10 px-4 py-10 sm:px-6">
+        <BeschikbaarheidMelding />
         {/* Kerncijfers */}
         <section aria-label="Kerncijfers" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Stat label="Trainingen deze week" value={`${SESSIES.length * GROEPEN.length}`} sub={`${SESSIES.length} momenten × ${GROEPEN.length} groepen`} />

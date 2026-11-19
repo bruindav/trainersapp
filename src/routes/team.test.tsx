@@ -1,3 +1,4 @@
+// Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen, taken en gedelegeerd teambeheer
 // Fix: fix-2 — testtrainers
 // Fix: fix-1 — Team-pagina: rechten per rol
@@ -23,6 +24,9 @@ function zet(huidigeTrainerId: string) {
       { email: 'cor@nat.nl', naam: 'Cor', rol: 'Trainer', kleur: '#6f9a0c', specialiteit: '', uitgenodigdOp: '2026-11-19', ...GEEN_TAKEN },
     ],
     toezichthouders: [{ id: 'z1', naam: 'Toos Toezicht', notitie: 'Alleen zondag' }],
+    trainingsmomenten: [],
+    roosterperiodes: [],
+    beschikbaarheid: {},
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],

@@ -1,9 +1,11 @@
+// Fix: fix-5 — roosterperiodes en beschikbaarheid in AppData
 // Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht)
 // Fix: fix-2 — testtrainers
 // Fix: fix-1 — voorbeelddata vervangen door Firestore; dit bestand bevat nu
 // de domeintypes, de vaste clubgegevens (sessies, groepen) en het
 // standaard-jaarplan waarmee de app bij de eerste inrichting start.
 import { addDays } from '@/lib/dates'
+import type { Beschikbaarheid, Roosterperiode, Trainingsmoment } from './rooster'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -387,6 +389,10 @@ export interface AppData {
   trainers: Trainer[]
   uitnodigingen: Uitnodiging[]
   toezichthouders: Toezichthouder[]
+  trainingsmomenten: Trainingsmoment[]
+  roosterperiodes: Roosterperiode[]
+  /** periodeId → trainerId → beschikbaarheid */
+  beschikbaarheid: Record<string, Record<string, Beschikbaarheid>>
   afwezigheden: Afwezigheid[]
   /** Handmatige wijzigingen bovenop de rotatie. `null` = open plek. */
   roosterWijzigingen: Record<string, string | null>

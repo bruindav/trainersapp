@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
  * Fix: fix-3 — rollen en taken, toezichthouders, migratie van 'Hoofdtrainer'.
  *
  * De vorm van de store (useAppData + selectors + acties) is gelijk gebleven
@@ -12,6 +13,7 @@
 import { useSyncExternalStore } from 'react'
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   onSnapshot,
@@ -45,6 +47,16 @@ import {
   type Training,
   type Uitnodiging,
 } from './fixtures'
+import {
+  STANDAARD_MOMENTEN,
+  type Beschikbaarheid,
+  type DatumBereik,
+  type Keuze,
+  type LosseTraining,
+  type PeriodeStatus,
+  type Roosterperiode,
+  type Trainingsmoment,
+} from './rooster'
 
 /** Pad van het (ene) jaarplan-document. */
 export const JAARPLAN_DOC = ['jaarplan', 'huidig'] as const
@@ -55,6 +67,9 @@ function leegeData(uid = ''): AppData {
     trainers: [],
     uitnodigingen: [],
     toezichthouders: [],
+    trainingsmomenten: [],
+    roosterperiodes: [],
+    beschikbaarheid: {},
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],
@@ -239,6 +254,76 @@ export function startSync(uid: string, magTeam: boolean): () => void {
       fout('jaarplan'),
     ),
   ]
+
+  stops.push(
+    onSnapshot(
+      collection(db, 'trainingsmomenten'),
+      (snap) => {
+        const trainingsmomenten = snap.docs
+          .map((d) => {
+            const x = d.data()
+            const m: Trainingsmoment = {
+              id: d.id,
+              dag: Number(x.dag ?? 0),
+              start: String(x.start ?? ''),
+              eind: String(x.eind ?? ''),
+              locatie: String(x.locatie ?? ''),
+              trainersNodig: Number(x.trainersNodig ?? 1),
+              actief: x.actief !== false,
+              volgorde: Number(x.volgorde ?? 0),
+            }
+            return m
+          })
+          .sort((a, b) => a.dag - b.dag || a.start.localeCompare(b.start))
+        setState((s) => ({ ...s, trainingsmomenten }))
+      },
+      (err) => console.error('Firestore-listener trainingsmomenten', err),
+    ),
+    onSnapshot(
+      collection(db, 'roosterperiodes'),
+      (snap) => {
+        const roosterperiodes = snap.docs
+          .map((d) => {
+            const x = d.data()
+            const p: Roosterperiode = {
+              id: d.id,
+              naam: String(x.naam ?? ''),
+              soort: x.soort === 'los' ? 'los' : 'wekelijks',
+              van: String(x.van ?? ''),
+              tot: String(x.tot ?? ''),
+              status: (x.status ?? 'concept') as PeriodeStatus,
+              deadline: x.deadline ?? null,
+              momentIds: Array.isArray(x.momentIds) ? x.momentIds : [],
+              losseTrainingen: Array.isArray(x.losseTrainingen) ? x.losseTrainingen : [],
+              vervallenData: Array.isArray(x.vervallenData) ? x.vervallenData : [],
+            }
+            return p
+          })
+          .sort((a, b) => a.van.localeCompare(b.van))
+        setState((s) => ({ ...s, roosterperiodes }))
+      },
+      (err) => console.error('Firestore-listener roosterperiodes', err),
+    ),
+    onSnapshot(
+      collectionGroup(db, 'beschikbaarheid'),
+      (snap) => {
+        const beschikbaarheid: Record<string, Record<string, Beschikbaarheid>> = {}
+        snap.docs.forEach((d) => {
+          const periodeId = d.ref.parent.parent?.id
+          if (!periodeId) return
+          const x = d.data()
+          ;(beschikbaarheid[periodeId] ??= {})[d.id] = {
+            trainerId: d.id,
+            keuzes: (x.keuzes ?? {}) as Record<string, Keuze>,
+            maxPerMaand: typeof x.maxPerMaand === 'number' ? x.maxPerMaand : null,
+            nietKunnen: Array.isArray(x.nietKunnen) ? x.nietKunnen : [],
+          }
+        })
+        setState((s) => ({ ...s, beschikbaarheid }))
+      },
+      (err) => console.error('Firestore-listener beschikbaarheid', err),
+    ),
+  )
 
   stops.push(
     onSnapshot(
@@ -525,4 +610,69 @@ export async function verwijderTesttrainers() {
   const batch = writeBatch(db)
   state.trainers.filter((t) => t.test).forEach((t) => batch.delete(doc(db, 'trainers', t.id)))
   await batch.commit()
+}
+
+// ---------------------------------------------------------------------------
+// Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid
+// ---------------------------------------------------------------------------
+
+export async function voegStandaardMomentenToe() {
+  const db = getDb()
+  const batch = writeBatch(db)
+  STANDAARD_MOMENTEN.forEach((m) => batch.set(doc(collection(db, 'trainingsmomenten')), m))
+  await batch.commit()
+}
+
+export async function bewaarMoment(m: Omit<Trainingsmoment, 'id'> & { id?: string }) {
+  const { id, ...data } = m
+  const ref = id ? doc(getDb(), 'trainingsmomenten', id) : doc(collection(getDb(), 'trainingsmomenten'))
+  await setDoc(ref, data)
+}
+
+export async function verwijderMoment(id: string) {
+  await deleteDoc(doc(getDb(), 'trainingsmomenten', id))
+}
+
+export type NieuwePeriode = Pick<Roosterperiode, 'naam' | 'soort' | 'van' | 'tot' | 'deadline'>
+
+export async function maakPeriode(p: NieuwePeriode) {
+  const ref = doc(collection(getDb(), 'roosterperiodes'))
+  await setDoc(ref, {
+    ...p,
+    status: 'concept',
+    momentIds: p.soort === 'wekelijks' ? state.trainingsmomenten.filter((m) => m.actief).map((m) => m.id) : [],
+    losseTrainingen: [],
+    vervallenData: [],
+    versie: 0,
+    aangemaaktOp: serverTimestamp(),
+  })
+  return ref.id
+}
+
+/** Werkt velden van een periode bij (alleen de coördinator). */
+export async function werkPeriodeBijRooster(
+  id: string,
+  w: Partial<Pick<Roosterperiode, 'naam' | 'van' | 'tot' | 'deadline' | 'status' | 'momentIds' | 'vervallenData'>> & {
+    losseTrainingen?: LosseTraining[]
+  },
+) {
+  await updateDoc(doc(getDb(), 'roosterperiodes', id), w)
+}
+
+export async function verwijderPeriode(id: string) {
+  await deleteDoc(doc(getDb(), 'roosterperiodes', id))
+}
+
+export async function bewaarBeschikbaarheid(
+  periodeId: string,
+  trainerId: string,
+  b: { keuzes: Record<string, Keuze>; maxPerMaand: number | null; nietKunnen: DatumBereik[] },
+) {
+  await setDoc(doc(getDb(), 'roosterperiodes', periodeId, 'beschikbaarheid', trainerId), {
+    keuzes: b.keuzes,
+    maxPerMaand: b.maxPerMaand,
+    nietKunnen: b.nietKunnen,
+    bijgewerktOp: serverTimestamp(),
+    bijgewerktDoor: state.huidigeTrainerId,
+  })
 }

@@ -1,3 +1,4 @@
+<!-- Fix: fix-5 — periodes en beschikbaarheid gebouwd -->
 <!-- Fix: fix-4 — bouwplan hernummerd -->
 <!-- Fix: fix-3 -->
 # Roosterontwerp: beschikbaarheid, indelen, ruilen
@@ -23,6 +24,6 @@ Besloten met Dave op 19 nov 2026. Schermvoorstel: <https://claude.ai/artifact/Jm
 |---|---|
 | fix-3 | Rollen en taken in Team, coördinator i.p.v. hoofdtrainer, groep toezichthouders ✅ |
 | fix-4 | Team-menu: rol direct in het menu (mobiel) ✅ |
-| fix-5 | Trainingsmomenten, roosterperiodes (wekelijks/los), beschikbaarheid opgeven, "wie kan wanneer" |
+| fix-5 | Trainingsmomenten, roosterperiodes (wekelijks/los), beschikbaarheid opgeven, "wie kan wanneer" ✅ |
 | fix-6 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren |
 | fix-7 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |
