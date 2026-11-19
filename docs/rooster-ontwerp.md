@@ -1,3 +1,4 @@
+<!-- Fix: fix-7 — feestdagen; beschikbaarheid op eigen pagina -->
 <!-- Fix: fix-6 — bouwplan hernummerd -->
 <!-- Fix: fix-5 — periodes en beschikbaarheid gebouwd -->
 <!-- Fix: fix-4 — bouwplan hernummerd -->
@@ -17,6 +18,7 @@ Besloten met Dave op 19 nov 2026. Schermvoorstel: <https://claude.ai/artifact/Jm
 - **Assistent-trainer** staat liefst samen met een ervaren trainer; alleen mag, met waarschuwing.
 - **Na publicatie**: een trainer kan zijn plek *vrijgeven* (iedereen kan overnemen) of *een collega vragen* om over te nemen of te ruilen (pas na diens ja). Geen goedkeuring nodig; de coördinator krijgt wel een melding.
 - **Open plek**: rode balk bovenaan bij iedereen tot de plek is ingevuld. De coördinator kan een externe trainer invullen of "zwemmers trainen zelf" kiezen (met een schema uit het logboek).
+- **Feestdagen** (Nieuwjaar, Pasen, Koningsdag, Bevrijdingsdag, Hemelvaart, Pinksteren, Kerst, Oudejaar) worden gemarkeerd; de coördinator laat ze met één klik vervallen.
 - **Toezicht**: bij elke training is een toezichthouder nodig, ook als er geen trainer is. Dat is een trainer met de taak *Toezichthouder* of iemand uit de aparte groep toezichthouders (voorlopig een namenlijst; later mogelijk een eigen rooster voor toezichthouders).
 
 ## Bouwplan
@@ -27,5 +29,6 @@ Besloten met Dave op 19 nov 2026. Schermvoorstel: <https://claude.ai/artifact/Jm
 | fix-4 | Team-menu: rol direct in het menu (mobiel) ✅ |
 | fix-5 | Trainingsmomenten, roosterperiodes (wekelijks/los), beschikbaarheid opgeven, "wie kan wanneer" ✅ |
 | fix-6 | Hosting ook op natutrecht-trainersapp.web.app ✅ |
-| fix-7 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren |
-| fix-8 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |
+| fix-7 | Feestdagen signaleren; beschikbaarheid op een eigen, duidelijke pagina ✅ |
+| fix-8 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren |
+| fix-9 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |

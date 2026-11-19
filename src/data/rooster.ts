@@ -1,6 +1,8 @@
+// Fix: fix-7 — feestdagen markeren bij trainingen
 // Fix: fix-5 — domein van het nieuwe rooster: trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Zie docs/rooster-ontwerp.md voor de besluiten.
 import { addDays, parseISODate } from '@/lib/dates'
+import { feestdag } from '@/lib/feestdagen'
 import type { Jaarplan } from './fixtures'
 
 /** 0 = maandag … 6 = zondag */
@@ -45,9 +47,9 @@ export type PeriodeStatus = 'concept' | 'beschikbaarheid' | 'indelen' | 'gepubli
 
 export const STATUS_STAPPEN: { status: PeriodeStatus; label: string }[] = [
   { status: 'concept', label: 'Concept' },
-  { status: 'beschikbaarheid', label: 'Beschikbaar\u00ADheid' },
+  { status: 'beschikbaarheid', label: 'Invullen' },
   { status: 'indelen', label: 'Indelen' },
-  { status: 'gepubliceerd', label: 'Gepubliceerd' },
+  { status: 'gepubliceerd', label: 'Gepubli\u00ADceerd' },
 ]
 
 export const STATUS_LABEL: Record<PeriodeStatus, string> = {
@@ -110,6 +112,8 @@ export interface PeriodeTraining {
   locatie: string
   trainersNodig: number
   omschrijving: string
+  /** Naam van de feestdag als de training daarop valt. */
+  feestdag?: string
 }
 
 /** Dagnummer met maandag = 0. */
@@ -157,6 +161,7 @@ export function trainingenInPeriode(
         locatie: l.locatie,
         trainersNodig: l.trainersNodig,
         omschrijving: l.omschrijving,
+        feestdag: feestdag(l.datum),
       }))
   }
   const gekozen = sorteerMomenten(momenten.filter((m) => periode.momentIds.includes(m.id)))
@@ -177,6 +182,7 @@ export function trainingenInPeriode(
         locatie: m.locatie,
         trainersNodig: m.trainersNodig,
         omschrijving: '',
+        feestdag: feestdag(d),
       })
     }
   }

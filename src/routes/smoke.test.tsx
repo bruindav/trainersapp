@@ -1,3 +1,4 @@
+// Fix: fix-7 — pagina beschikbaarheid
 // Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-1 — rooktest: elke pagina rendert met data uit de (gemockte) store
@@ -74,6 +75,8 @@ const PAGINAS: [string, RegExp][] = [
   ['/periodes', /^Roosterperiodes$/],
   ['/periodes/p1', /^Hoofdseizoen deel 2$/],
   ['/periodes/bestaat-niet', /^Periode niet gevonden$/],
+  ['/periodes/p1/beschikbaarheid', /^Wanneer kun jij trainen\?$/],
+  ['/periodes/p1/beschikbaarheid?trainer=b', /^Wanneer kan Bram trainen\?$/],
 ]
 
 describe('pagina’s renderen', () => {

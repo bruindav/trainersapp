@@ -1,12 +1,12 @@
+// Fix: fix-7 — beschikbaarheid via eigen pagina; feestdagen signaleren
 // Fix: fix-5 — één roosterperiode: instellingen, beschikbaarheid opgeven, wie kan wanneer
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, CalendarX, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, CalendarX, CircleCheck, PartyPopper, Plus, Save, Trash2 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/app-shell'
 import {
-  BeschikbaarheidFormulier,
   StatusBadge,
   StatusStappen,
   WieKanWanneer,
@@ -30,6 +30,7 @@ import {
   nieuwLosId,
   trainingenInPeriode,
   type PeriodeStatus,
+  type PeriodeTraining,
   type Roosterperiode,
 } from '@/data/rooster'
 import { trainerById, useAppData, verwijderPeriode, werkPeriodeBijRooster } from '@/data/store'
@@ -44,7 +45,6 @@ function PeriodePagina() {
   const data = useAppData()
   const ik = trainerById(data.huidigeTrainerId)!
   const periode = data.roosterperiodes.find((p) => p.id === periodeId)
-  const [namens, setNamens] = useState(ik.id)
 
   if (!periode) {
     return (
@@ -65,8 +65,8 @@ function PeriodePagina() {
   const trainersMetRooster = data.trainers.filter(geeftTraining)
   const ingevuld = trainersMetRooster.filter((t) => isVolledigIngevuld(data.beschikbaarheid[periode.id]?.[t.id], sleutels))
   const nogNiet = trainersMetRooster.filter((t) => !ingevuld.includes(t))
-  const voor = trainerById(namens) ?? ik
-  const magZelfInvullen = periode.status === 'beschikbaarheid'
+  const mijnB = data.beschikbaarheid[periode.id]?.[ik.id]
+  const ikIngevuld = isVolledigIngevuld(mijnB, sleutels)
 
   return (
     <>
@@ -104,8 +104,42 @@ function PeriodePagina() {
           </CardContent>
         </Card>
 
+        {geeftTraining(ik) && periode.status === 'beschikbaarheid' && (
+          <Link
+            to="/periodes/$periodeId/beschikbaarheid"
+            params={{ periodeId: periode.id }}
+            search={{}}
+            className={
+              ikIngevuld
+                ? 'flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none'
+                : 'flex items-center gap-3 rounded-xl bg-primary p-4 text-primary-foreground transition-opacity hover:opacity-95 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none'
+            }
+          >
+            {ikIngevuld ? (
+              <CircleCheck className="size-6 shrink-0 text-nat-green" aria-hidden />
+            ) : (
+              <CalendarCheck className="size-6 shrink-0" aria-hidden />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold">
+                {ikIngevuld ? 'Je hebt je beschikbaarheid ingevuld' : 'Vul je beschikbaarheid in'}
+              </span>
+              <span className={ikIngevuld ? 'block text-sm text-muted-foreground' : 'block text-sm opacity-90'}>
+                {ikIngevuld
+                  ? 'Iets veranderd? Je kunt het nog aanpassen.'
+                  : periode.deadline
+                    ? `Graag vóór ${formatLong(periode.deadline)}. Duurt ongeveer een minuut.`
+                    : 'Duurt ongeveer een minuut.'}
+              </span>
+            </span>
+            <span className="hidden rounded-full bg-background px-4 py-2 text-sm font-bold text-accent-foreground sm:block">
+              {ikIngevuld ? 'Wijzigen' : 'Invullen'}
+            </span>
+          </Link>
+        )}
+
         {ik.coordinator && (periode.status === 'concept' || periode.status === 'beschikbaarheid') && (
-          <Instellingen periode={periode} />
+          <Instellingen periode={periode} trainingen={trainingen} />
         )}
 
         <Sectie
@@ -132,6 +166,9 @@ function PeriodePagina() {
                     {t.start}–{t.eind}
                     {t.omschrijving && ` · ${t.omschrijving}`}
                     {t.locatie !== STANDAARD_LOCATIE && ` · ${t.locatie}`} · {t.trainersNodig}×
+                    {t.feestdag && (
+                      <span className="ml-1 rounded bg-nat-yellow/30 px-1 text-xs font-semibold">{t.feestdag}</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -139,64 +176,12 @@ function PeriodePagina() {
           )}
         </Sectie>
 
-        {(geeftTraining(ik) || ik.coordinator) && (
-          <section id="mijn-beschikbaarheid" aria-labelledby="mb-kop" className="scroll-mt-24">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <h2 id="mb-kop" className="text-lg font-bold">
-                    {voor.id === ik.id ? 'Mijn beschikbaarheid' : `Beschikbaarheid van ${voor.naam}`}
-                  </h2>
-                </CardTitle>
-                <CardDescription>
-                  {magZelfInvullen
-                    ? periode.deadline
-                      ? `Invullen kan tot en met ${formatLong(periode.deadline)}.`
-                      : 'Kies per training of je kunt.'
-                    : periode.status === 'concept'
-                      ? 'Invullen kan zodra de coördinator de beschikbaarheid opvraagt.'
-                      : 'Invullen is gesloten. Iets veranderd? Laat het de coördinator weten.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {ik.coordinator && (
-                  <div className="max-w-sm space-y-1.5">
-                    <Label htmlFor="namens">Invullen voor</Label>
-                    <Select value={namens} onValueChange={setNamens}>
-                      <SelectTrigger id="namens" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {trainersMetRooster.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.id === ik.id ? `${t.naam} (ik)` : t.naam}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {geeftTraining(voor) ? (
-                  <BeschikbaarheidFormulier
-                    key={`${periode.id}-${voor.id}`}
-                    periode={periode}
-                    trainer={voor}
-                    magBewerken={ik.coordinator || (voor.id === ik.id && magZelfInvullen)}
-                  />
-                ) : (
-                  <p className="text-muted-foreground">Kies hierboven een trainer.</p>
-                )}
-              </CardContent>
-            </Card>
-          </section>
-        )}
-
         <Sectie
           titel="Wie kan wanneer"
           omschrijving={
             nogNiet.length === 0
               ? 'Iedereen heeft ingevuld.'
-              : `Nog niet (volledig) ingevuld: ${nogNiet.map((t) => t.naam).join(', ')}.`
+              : `Nog niet (volledig) ingevuld: ${nogNiet.map((t) => t.naam).join(', ')}.${ik.coordinator ? ' Met het potloodje vul je in namens iemand.' : ''}`
           }
         >
           <WieKanWanneer periode={periode} />
@@ -289,7 +274,7 @@ function StatusActies({ periode, aantalTrainingen }: { periode: Roosterperiode; 
   )
 }
 
-function Instellingen({ periode }: { periode: Roosterperiode }) {
+function Instellingen({ periode, trainingen }: { periode: Roosterperiode; trainingen: PeriodeTraining[] }) {
   const data = useAppData()
   const [naam, setNaam] = useState(periode.naam)
   const [van, setVan] = useState(periode.van)
@@ -385,6 +370,8 @@ function Instellingen({ periode }: { periode: Roosterperiode }) {
               </div>
             </fieldset>
 
+            <Feestdagen periode={periode} trainingen={trainingen} bezig={bezig} bewaar={bewaar} />
+
             <div className="space-y-2">
               <p className="flex items-center gap-2 text-sm font-bold">
                 <CalendarX className="size-4" aria-hidden /> Vervallen data
@@ -448,7 +435,21 @@ function Instellingen({ periode }: { periode: Roosterperiode }) {
             </div>
           </>
         ) : (
-          <LosseTrainingen periode={periode} bezig={bezig} bewaar={bewaar} />
+          <>
+            <LosseTrainingen periode={periode} bezig={bezig} bewaar={bewaar} />
+            {trainingen.some((t) => t.feestdag) && (
+              <Alert>
+                <AlertDescription>
+                  Let op, feestdag:{' '}
+                  {trainingen
+                    .filter((t) => t.feestdag)
+                    .map((t) => `${t.feestdag} (${formatShort(t.datum)})`)
+                    .join(', ')}
+                  .
+                </AlertDescription>
+              </Alert>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -582,6 +583,80 @@ function LosseTrainingen({
           <Plus aria-hidden /> Training toevoegen
         </Button>
       </form>
+    </div>
+  )
+}
+
+function Feestdagen({
+  periode,
+  trainingen,
+  bezig,
+  bewaar,
+}: {
+  periode: Roosterperiode
+  trainingen: PeriodeTraining[]
+  bezig: boolean
+  bewaar: (w: Parameters<typeof werkPeriodeBijRooster>[1], melding: string) => Promise<void>
+}) {
+  // Eén regel per datum (op zondag kunnen er twee trainingen zijn).
+  const perDatum = new Map<string, { naam: string; aantal: number }>()
+  trainingen.forEach((t) => {
+    if (!t.feestdag) return
+    const x = perDatum.get(t.datum)
+    perDatum.set(t.datum, { naam: t.feestdag, aantal: (x?.aantal ?? 0) + 1 })
+  })
+  const data = [...perDatum.entries()].sort(([a], [b]) => a.localeCompare(b))
+
+  return (
+    <div className="space-y-2 rounded-xl bg-nat-yellow/15 p-4">
+      <p className="flex items-center gap-2 text-sm font-bold">
+        <PartyPopper className="size-4" aria-hidden /> Feestdagen in deze periode
+      </p>
+      {data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Geen trainingen op een feestdag.</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Op deze dagen is er grote kans dat er geen training is. Laat ze vervallen als het bad dicht is.
+          </p>
+          <ul className="space-y-1">
+            {data.map(([datum, f]) => (
+              <li key={datum} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm">
+                  <strong>
+                    {DAGEN_KORT[dagVan(datum)]} {formatShort(datum)}
+                  </strong>{' '}
+                  · {f.naam}
+                  {f.aantal > 1 && ` · ${f.aantal} trainingen`}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bezig}
+                  onClick={() => bewaar({ vervallenData: [...periode.vervallenData, datum] }, `${f.naam} vervalt`)}
+                >
+                  Laten vervallen
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {data.length > 1 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={bezig}
+              onClick={() =>
+                bewaar(
+                  { vervallenData: [...new Set([...periode.vervallenData, ...data.map(([d]) => d)])] },
+                  'Alle feestdagen vervallen',
+                )
+              }
+            >
+              Alle feestdagen laten vervallen
+            </Button>
+          )}
+        </>
+      )}
     </div>
   )
 }

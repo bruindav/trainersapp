@@ -1,3 +1,4 @@
+<!-- Fix: fix-7 — beschikbaarheid op eigen pagina, feestdagen -->
 <!-- Fix: fix-5 — roosterperiodes en beschikbaarheid -->
 <!-- Fix: fix-3 — rollen en taken; nieuw roosterontwerp -->
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
@@ -45,7 +46,7 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── app-shell.tsx     # Header (logo, nav, account menu, mobile Sheet), footer, PageHeader
 │   │   ├── auth-schermen.tsx # Login, email-link confirm, first-time setup, no-access, loading screens
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
-│   │   ├── rooster-onderdelen.tsx # Status badge/steps, availability form, who-can-when grid, reminder banner
+│   │   ├── rooster-onderdelen.tsx # Status badge/steps, who-can-when grid, reminder banner
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
 │   ├── data
@@ -56,6 +57,7 @@ This document describes the project for developers and AI agents working on this
 │   ├── firebase-config.ts    # Public Firebase web config (fill in per project)
 │   ├── lib
 │   │   ├── firebase.ts       # initializeApp, Auth, Firestore (offline cache), emulator switch
+│   │   ├── feestdagen.ts     # Dutch public holidays (Easter-based); trainings on them are flagged
 │   │   ├── dates.ts          # ISO-date helpers (local calendar days), nl-NL formatting, ISO week numbers
 │   │   └── utils.ts          # cn()
 │   ├── routes
@@ -65,7 +67,8 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── jaarplan.tsx      # Season timeline, periods (edit = coordinator or jaarplanBeheer), publish dialog
 │   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
 │   │   ├── periodes.index.tsx      # Roster periods list, fixed training moments, new-period dialog
-│   │   ├── periodes.$periodeId.tsx # One period: status flow, settings, my availability, who-can-when grid
+│   │   ├── periodes.$periodeId.tsx # One period: status flow, settings (incl. holidays), call-to-action, who-can-when grid
+│   │   ├── periodes.$periodeId_.beschikbaarheid.tsx # Focused 3-step availability form (?trainer= for the coordinator)
 │   │   └── team.tsx          # Team: roles + tasks, invites, supervisors group, test trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
 ```
@@ -175,7 +178,7 @@ pnpm preview       # Preview the production build
 - **Logged-in trainer** = Firebase uid (`huidigeTrainerId`).
 - **Rol vs. taken** (fix-3): `rol` says whether someone gives training (`Geen training` = e.g. a coordinator who doesn't coach; excluded from roster and training pickers). Tasks are separate flags: `coordinator` (schedules; may do everything), `jaarplanBeheer` (edits/publishes the jaarplan), `teamBeheer` (delegated by the coordinator: invite and edit members, but never coordinators or the heavy tasks `coordinator`/`teamBeheer`), `toezichthouder` (pool-supervisor qualification). A coordinator can't remove their own coordinator flag or delete themselves, so one always remains. Legacy docs with `rol: 'Hoofdtrainer'` count as coordinator and are migrated on that user's next login.
 - **Toezicht**: every training needs a supervisor — a qualified trainer or someone from `toezichthouders`, also when swimmers train without a trainer.
-- **New roster design** (to be built in fix-4…6): see `docs/rooster-ontwerp.md`.
+- **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
 - **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.

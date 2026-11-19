@@ -1,3 +1,4 @@
+// Fix: fix-7 — feestdag op training
 // Fix: fix-5 — trainingen in een periode, kolommen en invulstatus
 import { describe, expect, it } from 'vitest'
 
@@ -43,6 +44,12 @@ describe('trainingenInPeriode', () => {
     expect(t[0]).toMatchObject({ datum: '2027-01-05', start: '21:00', trainersNodig: 2 })
     // Zondag twee trainingen achter elkaar
     expect(t.filter((x) => x.datum === '2027-01-10').map((x) => x.start)).toEqual(['11:00', '12:00'])
+  })
+  it('markeert een training op een feestdag', () => {
+    const p = { ...periode, van: '2027-04-26', tot: '2027-05-02' }
+    const t = trainingenInPeriode(p, momenten, jaarplan)
+    expect(t.find((x) => x.datum === '2027-04-27')?.feestdag).toBe('Koningsdag')
+    expect(t.find((x) => x.datum === '2027-04-29')?.feestdag).toBeUndefined()
   })
   it('losse trainingen: precies de opgegeven trainingen', () => {
     const los: Roosterperiode = {
