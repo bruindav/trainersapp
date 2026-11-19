@@ -1,8 +1,9 @@
+// Fix: fix-11 — openPlekken met extern en zelf
 // Fix: fix-10 — tests voor het indelingsvoorstel en de waarschuwingen
 import { describe, expect, it } from 'vitest'
 
 import { GEEN_TAKEN, type Trainer } from './fixtures'
-import { controleer, maakVoorstel, tellingen } from './indeling'
+import { controleer, maakVoorstel, openPlekken, tellingen } from './indeling'
 import type { Beschikbaarheid, PeriodeTraining } from './rooster'
 
 const T = (id: string, extra: Partial<Trainer> = {}): Trainer => ({
@@ -62,5 +63,17 @@ describe('controleer', () => {
     expect(controleer(training('2027-01-05'), { trainers: ['a'] }, trainers, besch)).toEqual([])
     expect(controleer(training('2027-01-05'), { trainers: ['b'], toezicht: 'groep:z1' }, trainers, besch)).toEqual([])
     expect(controleer(training('2027-01-05'), { trainers: ['b'] }, trainers, besch).map((x) => x.soort)).toEqual(['toezicht'])
+  })
+})
+
+// Fix: fix-11 — externe trainer en zelf trainen tellen mee bij open plekken
+describe('openPlekken met extern en zelf', () => {
+  const t = { key: '2027-01-05|m1', datum: '2027-01-05', keuzeSleutel: 'm1', start: '21:00', eind: '22:00', locatie: '', trainersNodig: 2, omschrijving: '' }
+  it('een externe trainer vult een plek', () => {
+    expect(openPlekken(t, { trainers: ['a'] })).toBe(1)
+    expect(openPlekken(t, { trainers: ['a'], extern: 'Kees' })).toBe(0)
+  })
+  it('zwemmers trainen zelf: geen open plek', () => {
+    expect(openPlekken(t, { trainers: [], zelf: true })).toBe(0)
   })
 })

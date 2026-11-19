@@ -1,3 +1,4 @@
+// Fix: fix-11 — herinnering en standaardmoment uit het gepubliceerde rooster
 // Fix: fix-3 — alleen wie training geeft is kiesbaar
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
@@ -39,7 +40,6 @@ import { geeftTraining,
 } from '@/data/fixtures'
 import {
   groepById,
-  roosterVoorWeek,
   sessieById,
   totaalMeters,
   trainerById,
@@ -47,6 +47,8 @@ import {
   verwijderTraining,
   voegTrainingToe,
 } from '@/data/store'
+import { DAGEN, dagVan } from '@/data/rooster'
+import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, formatLong, formatShort, startOfWeek, todayISO } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
@@ -102,14 +104,13 @@ function TrainingenPagina() {
   }, [gefilterd])
 
   // Mijn trainingen van de afgelopen 2 weken die nog niet zijn vastgelegd
-  const ontbrekend = [-7, 0]
-    .flatMap((d) => roosterVoorWeek(data, addDays(startOfWeek(vandaag), d)))
-    .filter(
-      (s) =>
-        s.trainerId === data.huidigeTrainerId &&
-        s.datum < vandaag &&
-        !data.trainingen.some((t) => t.datum === s.datum && t.sessieId === s.sessieId && t.groepId === s.groepId),
-    )
+  const ontbrekend = gepubliceerdeTrainingen(data).filter(
+    (g) =>
+      staatIngeroosterd(g, data.huidigeTrainerId) &&
+      g.training.datum < vandaag &&
+      g.training.datum >= addDays(startOfWeek(vandaag), -7) &&
+      !data.trainingen.some((t) => t.datum === g.training.datum && t.trainerId === data.huidigeTrainerId),
+  )
 
   const geselecteerd = data.trainingen.find((t) => t.id === zoek.id) ?? null
   const formOpen = !!zoek.nieuw
@@ -140,7 +141,7 @@ function TrainingenPagina() {
             <p className="text-sm">
               <span className="font-bold">Nog vast te leggen:</span>{' '}
               {ontbrekend
-                .map((s) => `${sessieById(s.sessieId).dag.toLowerCase()} ${formatShort(s.datum)} (${groepById(s.groepId).naam})`)
+                .map((g) => `${DAGEN[dagVan(g.training.datum)]} ${formatShort(g.training.datum)} ${g.training.start}`)
                 .join(', ')}
             </p>
             <Button size="sm" className="sm:ml-auto" onClick={() => openNieuw()}>
@@ -466,19 +467,15 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
     .filter((m) => m.datum <= vandaag)
     .reverse()
 
-  const mijnMoment = (() => {
-    for (const m of momenten) {
-      const slot = roosterVoorWeek(data, startOfWeek(m.datum)).find(
-        (s) => s.sessieId === m.sessie.id && s.trainerId === data.huidigeTrainerId,
-      )
-      if (slot) return { moment: `${m.datum}|${m.sessie.id}`, groep: slot.groepId }
-    }
-    return null
-  })()
+  // Het laatste moment waarop ik volgens het gepubliceerde rooster training gaf.
+  const mijnGeroosterd = gepubliceerdeTrainingen(data).filter((g) => staatIngeroosterd(g, data.huidigeTrainerId))
+  const mijnMoment = momenten.find((m) =>
+    mijnGeroosterd.some((g) => g.training.datum === m.datum && g.training.start === m.sessie.start),
+  )
 
   const [modus, setModus] = useState<'samenstellen' | 'uploaden'>(basis?.bijlage && !basis.blokken.length ? 'uploaden' : 'samenstellen')
-  const [moment, setMoment] = useState(mijnMoment?.moment ?? (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
-  const [groepId, setGroepId] = useState(basis?.groepId ?? mijnMoment?.groep ?? GROEPEN[0].id)
+  const [moment, setMoment] = useState(mijnMoment ? `${mijnMoment.datum}|${mijnMoment.sessie.id}` : (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
+  const [groepId, setGroepId] = useState(basis?.groepId ?? GROEPEN[0].id)
   const [trainerId, setTrainerId] = useState(data.huidigeTrainerId)
   const [titel, setTitel] = useState(basis ? basis.titel : '')
   const [focus, setFocus] = useState<Focus[]>(basis?.focus ?? [])

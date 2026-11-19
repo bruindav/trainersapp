@@ -1,3 +1,4 @@
+// Fix: fix-11 — Mijn rooster, open-plek-balk en verzoeken
 // Fix: fix-10 — pagina indelen
 // Fix: fix-7 — pagina beschikbaarheid
 // Fix: fix-5 — nieuwe velden in testdata
@@ -8,7 +9,14 @@ import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/rea
 import { describe, expect, it, vi } from 'vitest'
 
 import { GEEN_TAKEN, STANDAARD_JAARPLAN, type AppData } from '@/data/fixtures'
+import { dagVan } from '@/data/rooster'
+import { addDays, todayISO } from '@/lib/dates'
 import { routeTree } from '@/routeTree.gen'
+
+// Een gepubliceerde periode vanaf vandaag: over 3 dagen staat Anna op het
+// rooster (met een open tweede plek), een week later staat Bram er alleen op.
+const D1 = addDays(todayISO(), 3)
+const D2 = addDays(D1, 7)
 
 const DATA: AppData = {
   huidigeTrainerId: 'a',
@@ -20,6 +28,7 @@ const DATA: AppData = {
   toezichthouders: [],
   trainingsmomenten: [
     { id: 'm1', dag: 1, start: '21:00', eind: '22:00', locatie: 'De Kwakel', trainersNodig: 2, actief: true, volgorde: 1 },
+    { id: 'm2', dag: dagVan(D1), start: '11:00', eind: '12:00', locatie: 'De Kwakel', trainersNodig: 2, actief: true, volgorde: 2 },
   ],
   roosterperiodes: [
     {
@@ -27,10 +36,19 @@ const DATA: AppData = {
       status: 'beschikbaarheid', deadline: '2026-12-15', momentIds: ['m1'], losseTrainingen: [], vervallenData: [],
       indeling: { '2027-01-05|m1': { trainers: ['b'] } }, versie: 0,
     },
+    {
+      id: 'p2', naam: 'Nu', soort: 'wekelijks', van: todayISO(), tot: addDays(todayISO(), 13),
+      status: 'gepubliceerd', deadline: todayISO(), momentIds: ['m2'], losseTrainingen: [], vervallenData: [],
+      indeling: { [`${D1}|m2`]: { trainers: ['a'], nodig: 2 }, [`${D2}|m2`]: { trainers: ['b'], nodig: 1 } }, versie: 1,
+    },
   ],
   beschikbaarheid: { p1: { b: { trainerId: 'b', keuzes: { m1: 'graag' }, maxPerMaand: 2, nietKunnen: [] } } },
-  ruilverzoeken: [],
-  wijzigingslog: [],
+  ruilverzoeken: [
+    { id: 'v1', periodeId: 'p2', van: 'b', naar: 'a', vanKey: `${D2}|m2`, terugKey: null, status: 'open', bericht: 'Kun jij?', aangemaaktOp: '' },
+  ],
+  wijzigingslog: [
+    { id: 'l1', periodeId: 'p2', soort: 'vrijgeven', tekst: 'Bram kan niet op di 1 dec: plek vrijgegeven', door: 'b', op: new Date().toISOString() },
+  ],
   afwezigheden: [],
   roosterWijzigingen: {},
   trainingen: [
@@ -72,7 +90,7 @@ vi.mock('@/data/store', async (orig) => {
 
 const PAGINAS: [string, RegExp][] = [
   ['/', /Anna/],
-  ['/rooster', /Week \d+/],
+  ['/rooster', /^Mijn rooster$/],
   ['/jaarplan', /Jaarplan|Seizoen/],
   ['/trainingen', /getraind/],
   ['/team', /^Team$/],
@@ -94,5 +112,23 @@ describe('pagina’s renderen', () => {
     const h1 = await screen.findByRole('heading', { level: 1 })
     expect(h1.textContent).toMatch(kop)
     expect(screen.queryByText('Deze pagina kon niet laden')).not.toBeInTheDocument()
+  })
+})
+
+describe('Mijn rooster', () => {
+  it('toont open plek, verzoek, eigen training en wijzigingen', async () => {
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/rooster'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    await screen.findByRole('heading', { level: 1 })
+    // Open-plek-balk bovenaan (Anna staat er zelf al op, dus geen "Ik neem hem").
+    expect(screen.getByRole('region', { name: 'Open plekken' })).toHaveTextContent('Nog geen trainer')
+    expect(screen.getByText('Verzoeken voor jou')).toBeInTheDocument()
+    expect(screen.getByText(/Bram vraagt: wil jij/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ik kan niet' })).toBeInTheDocument()
+    expect(screen.getByText('Recente wijzigingen')).toBeInTheDocument()
+    expect(screen.getByText(/plek vrijgegeven/)).toBeInTheDocument()
   })
 })

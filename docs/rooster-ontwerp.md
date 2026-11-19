@@ -1,3 +1,4 @@
+<!-- Fix: fix-11 — laatste deel gebouwd -->
 <!-- Fix: fix-10 — indelen gebouwd -->
 <!-- Fix: fix-9 — inklapbare blokken -->
 <!-- Fix: fix-8 — testbeschikbaarheid -->
@@ -36,4 +37,4 @@ Besloten met Dave op 19 nov 2026. Schermvoorstel: <https://claude.ai/artifact/Jm
 | fix-8 | Knop: testbeschikbaarheid voor testtrainers ✅ |
 | fix-9 | Inklapbare blokken, compactere tabel op mobiel ✅ |
 | fix-10 | Indelen: voorstel, waarschuwingen, handmatig, +1 trainer, toezicht, publiceren ✅ |
-| fix-11 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app |
+| fix-11 | Mijn rooster, vrijgeven/overnemen/ruilen, open-plek-balk, externe trainer / zelf trainen, meldingen in de app ✅ |

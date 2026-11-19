@@ -5,6 +5,8 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-11 — Mijn rooster, ruilen, wijzigingslog -->
+
 This document describes the project for developers and AI agents working on this codebase.
 
 ## Project Overview
@@ -48,12 +50,14 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── auth-schermen.tsx # Login, email-link confirm, first-time setup, no-access, loading screens
 │   │   ├── trainer-avatar.tsx# Coloured initials avatar + chip per trainer
 │   │   ├── rooster-onderdelen.tsx # Status badge/steps, who-can-when grid, reminder banner
+│   │   ├── rooster-acties.tsx     # Red open-slot bar (all pages), "Ik kan niet" dialog (release / ask a colleague)
 │   │   ├── error-pages.tsx   # Dutch 404 / error pages
 │   │   └── ui                # shadcn/ui components
 │   ├── data
 │   │   ├── fixtures.ts       # Domain types, fixed club data (sessies, groepen), default jaarplan, AppData
 │   │   ├── auth.ts           # Firebase Auth state, access check, invite redemption, first-time setup
-│   │   ├── indeling.ts       # Scheduling logic: maakVoorstel(), controleer() warnings, tellingen()
+│   │   ├── indeling.ts       # Scheduling logic: maakVoorstel(), controleer() warnings, tellingen(), openPlekken()
+│   │   ├── wijzigingen.ts    # Published trainings, swap requests and change-log types; kanOvernemen()
 │   │   ├── rooster.ts        # Roster domain: moments, periods, availability, trainingenInPeriode()
 │   │   └── store.ts          # useSyncExternalStore store fed by Firestore onSnapshot; selectors + write actions
 │   ├── firebase-config.ts    # Public Firebase web config (fill in per project)
@@ -65,7 +69,7 @@ This document describes the project for developers and AI agents working on this
 │   ├── routes
 │   │   ├── __root.tsx        # Auth gate + AppShell around <Outlet/> (HTML shell is index.html)
 │   │   ├── index.tsx         # Overzicht / dashboard
-│   │   ├── rooster.tsx       # Weekly roster grid, assign dialog, 4-week distribution (?week=YYYY-MM-DD)
+│   │   ├── rooster.tsx       # Mijn rooster: own trainings, "Ik kan niet", requests for me, open slots, change log (coordinator)
 │   │   ├── jaarplan.tsx      # Season timeline, periods (edit = coordinator or jaarplanBeheer), publish dialog
 │   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
 │   │   ├── periodes.index.tsx      # Roster periods list, fixed training moments, new-period dialog
@@ -86,7 +90,9 @@ This document describes the project for developers and AI agents working on this
 | `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp + the four task flags | coordinator / teamBeheer (invitee may delete own on redeem) |
 | `toezichthouders/{id}` | naam, notitie — the club's separate group of supervisors (no accounts yet) | coordinator / teamBeheer |
 | `trainingsmomenten/{id}` | dag (0=ma…6=zo), start, eind, locatie, trainersNodig, actief, volgorde | coordinator |
-| `roosterperiodes/{id}` | naam, soort (`wekelijks`/`los`), van, tot, status (`concept`→`beschikbaarheid`→`indelen`→`gepubliceerd`/`afgesloten`), deadline, momentIds, losseTrainingen[], vervallenData[], indeling {`datum|momentId`: {trainers[], nodig?, toezicht?}}, versie, gepubliceerdOp | coordinator |
+| `roosterperiodes/{id}` | naam, soort (`wekelijks`/`los`), van, tot, status (`concept`→`beschikbaarheid`→`indelen`→`gepubliceerd`/`afgesloten`), deadline, momentIds, losseTrainingen[], vervallenData[], indeling {`datum|momentId`: {trainers[], nodig, toezicht?, extern?, externToezicht?, zelf?, schema?}}, versie, gepubliceerdOp, laatsteWijziging | coordinator; after publication a trainer may release own slot, take an open slot, or execute an accepted request (rules check exactly) |
+| `roosterperiodes/{id}/wijzigingslog/{id}` | soort (vrijgeven/overnemen/ruil/overdracht/indeling), tekst, door, op — shown to the coordinator | any trainer, as self |
+| `ruilverzoeken/{id}` | periodeId, van, naar, vanKey, terugKey (null = only take over), status open/geaccepteerd/geweigerd/ingetrokken, bericht | create by `van`; `naar` refuses or accepts (accept only together with the roster change); `van` withdraws |
 | `roosterperiodes/{id}/beschikbaarheid/{uid}` | keuzes {sleutel: graag/kan/nee}, maxPerMaand, nietKunnen [{van,tot}] — readable by all trainers | own while status = beschikbaarheid; coordinator always |
 | `config/setup` | hoofdtrainerUid (= first coordinator) — exists once the app is set up | first user, once |
 | `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
@@ -175,7 +181,7 @@ pnpm preview       # Preview the production build
 
 - **Brand**: colours taken from natutrecht.nl — logo red `#e64439` (`--primary`), ink `#2b2222`, Montserrat, and the six rainbow colours from the logo exposed as `bg-nat-*` / `text-nat-*` utilities and the `.nat-rainbow` stripe. Keep using theme variables, not raw hex, in components (trainer colours in fixtures are the exception).
 - **Sessions are real**: Tue & Thu 21:00–22:00 and Sun 11:00–12:00 at Zwembad De Kwakel (from the club site). Groups/lanes (Basis 1–2, Gevorderd 3–4, Wedstrijd 5–6) and trainer names are **placeholders** to be replaced with the real team.
-- **Roster model**: each slot = week × sessie × groep. A deterministic rotation (`rotatieTrainer`) proposes a trainer for every week; manual changes are stored as overrides keyed `weekStart|sessieId|groepId` (`null` = open slot). Keep this "rotation + overrides" model when moving to the database.
+- **Roster model** (fix-10/11): the published `indeling` of a `roosterperiode` is the roster. The old rotation (`roosterVoorWeek`, `roosterWijzigingen`) is no longer shown anywhere and can be removed later. Swaps need no approval; the coordinator sees them in the change log on Mijn rooster. Publishing always writes `nodig` per training because the rules check it on take-over.
 - **Roster rotation** runs over all trainers sorted by uid; adding or removing a trainer changes future proposals (manual overrides stay). A configurable rotation is milestone 5.
 - **Jaarplan**: on first-time setup `STANDAARD_JAARPLAN` (season 2026–2027, goal EuroGames Cardiff 14–17 Jul 2027) is written to `jaarplan/huidig`; competition dates other than EuroGames are "onder voorbehoud".
 - **Logged-in trainer** = Firebase uid (`huidigeTrainerId`).

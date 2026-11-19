@@ -435,8 +435,9 @@ describe('na publicatie: vrijgeven, overnemen, ruilen', () => {
     // Alleen status zetten zonder roosterwijziging: geweigerd.
     await assertFails(updateDoc(doc(als(C), 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() }))
     // Een ander kan niet accepteren.
-    const anders = writeBatch(als(HOOFD))
-    anders.update(doc(als(HOOFD), 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() })
+    const hoofdDb = als(HOOFD)
+    const anders = writeBatch(hoofdDb)
+    anders.update(doc(hoofdDb, 'ruilverzoeken', 'v1'), { status: 'geaccepteerd', afgehandeldOp: serverTimestamp() })
     await assertFails(anders.commit())
     // De gevraagde collega accepteert: beide trainingen wisselen in één keer.
     const db = als(C)

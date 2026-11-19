@@ -1,3 +1,4 @@
+// Fix: fix-11 — open-plek-balk onder de kop
 // Fix: fix-5 — navigatie-item Periodes
 // Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
@@ -20,11 +21,12 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTi
 import { logUit } from '@/data/auth'
 import { trainerById, useAppData } from '@/data/store'
 import { rolLabel } from '@/data/fixtures'
+import { OpenPlekBalk } from './rooster-acties'
 import { TrainerAvatar } from './trainer-avatar'
 
 const NAV = [
   { to: '/', label: 'Overzicht', icon: LayoutDashboard },
-  { to: '/rooster', label: 'Rooster', icon: Waves },
+  { to: '/rooster', label: 'Mijn rooster', icon: Waves },
   { to: '/periodes', label: 'Periodes', icon: CalendarCheck },
   { to: '/jaarplan', label: 'Jaarplan', icon: CalendarRange },
   { to: '/trainingen', label: 'Trainingen', icon: ClipboardList },
@@ -166,6 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <div className="nat-rainbow h-1" aria-hidden />
       </header>
+      <OpenPlekBalk />
 
       <main className="flex-1">{children}</main>
 

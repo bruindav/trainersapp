@@ -1,3 +1,4 @@
+// Fix: fix-11 — volgende training, open plekken en week-overzicht uit het gepubliceerde rooster
 // Fix: fix-5 — melding: beschikbaarheid invullen
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { Link, createFileRoute } from '@tanstack/react-router'
@@ -21,16 +22,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { GROEPEN, SESSIES } from '@/data/fixtures'
-import {
-  groepById,
-  huidigePeriode,
-  roosterVoorWeek,
-  sessieById,
-  totaalMeters,
-  trainerById,
-  useAppData,
-} from '@/data/store'
+import { DAGEN, dagVan } from '@/data/rooster'
+import { groepById, huidigePeriode, totaalMeters, trainerById, useAppData } from '@/data/store'
+import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, daysBetween, formatLong, formatShort, isoWeekNumber, startOfWeek, todayISO } from '@/lib/dates'
 
 export const Route = createFileRoute('/')({
@@ -44,12 +38,13 @@ function Overzicht() {
   const ik = trainerById(data.huidigeTrainerId)!
   const voornaam = ik.naam.split(' ')[0]
 
-  const rooster = roosterVoorWeek(data, week)
-  const komende = [0, 7, 14, 21, 28].flatMap((d) => roosterVoorWeek(data, addDays(week, d)))
-  const mijnVolgende = komende.find((s) => s.trainerId === ik.id && s.datum >= vandaag)
-  const openPlekken = [0, 7].flatMap((d) => roosterVoorWeek(data, addDays(week, d))).filter(
-    (s) => s.datum >= vandaag && (!s.trainerId || s.afwezig),
-  )
+  const alle = gepubliceerdeTrainingen(data)
+  const komende = alle.filter((g) => g.training.datum >= vandaag)
+  const mijnVolgende = komende.find((g) => staatIngeroosterd(g, ik.id))
+  const deezeWeek = alle.filter((g) => g.training.datum >= week && g.training.datum <= addDays(week, 6))
+  const openPlekken = komende
+    .filter((g) => g.training.datum <= addDays(vandaag, 14))
+    .reduce((som, g) => som + g.open, 0)
 
   const weekGeleden = addDays(vandaag, -7)
   const recent = data.trainingen.filter((t) => t.datum >= weekGeleden && t.datum <= vandaag)
@@ -83,13 +78,13 @@ function Overzicht() {
               <span className="text-primary">klaar voor het bad?</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg text-white/80">
-              Het rooster, het jaarplan en het trainingslogboek van de Nat Utrecht-trainers op één plek. Zie wie welke
-              baan geeft en wat er deze week al gezwommen is.
+              Het rooster, het jaarplan en het trainingslogboek van de Nat Utrecht-trainers op één plek. Zie wie wanneer
+              training geeft en wat er deze week al gezwommen is.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg" className="rounded-full font-bold">
                 <Link to="/rooster">
-                  Bekijk het rooster <ArrowRight />
+                  Mijn rooster <ArrowRight />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="rounded-full border-white/30 bg-white/5 font-bold text-white hover:bg-white/15 hover:text-white">
@@ -104,19 +99,25 @@ function Overzicht() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Jouw volgende training</p>
             {mijnVolgende ? (
               <>
-                <p className="mt-2 text-2xl font-extrabold capitalize">{formatLong(mijnVolgende.datum)}</p>
+                <p className="mt-2 text-2xl font-extrabold capitalize">{formatLong(mijnVolgende.training.datum)}</p>
                 <div className="mt-4 space-y-2 text-sm">
                   <p className="flex items-center gap-2">
                     <CalendarClock className="size-4 text-primary" aria-hidden />
-                    {sessieById(mijnVolgende.sessieId).start}–{sessieById(mijnVolgende.sessieId).eind} uur
+                    {mijnVolgende.training.start}–{mijnVolgende.training.eind} uur
                   </p>
-                  <p className="flex items-center gap-2">
-                    <Users className="size-4 text-primary" aria-hidden />
-                    {groepById(mijnVolgende.groepId).naam} · {groepById(mijnVolgende.groepId).banen}
-                  </p>
+                  {(mijnVolgende.indeling?.trainers.length ?? 0) > 1 && (
+                    <p className="flex items-center gap-2">
+                      <Users className="size-4 text-primary" aria-hidden />
+                      Met{' '}
+                      {mijnVolgende.indeling!.trainers
+                        .filter((x) => x !== ik.id)
+                        .map((x) => trainerById(x)?.naam.split(' ')[0] ?? 'Oud-trainer')
+                        .join(', ')}
+                    </p>
+                  )}
                   <p className="flex items-center gap-2">
                     <MapPin className="size-4 text-primary" aria-hidden />
-                    {sessieById(mijnVolgende.sessieId).locatie}
+                    {mijnVolgende.training.omschrijving || mijnVolgende.training.locatie}
                   </p>
                 </div>
                 {periode && (
@@ -127,7 +128,7 @@ function Overzicht() {
               </>
             ) : (
               <p className="mt-3 text-muted-foreground">
-                Je staat de komende vijf weken niet ingeroosterd. Neem een open plek in het rooster.
+                Je staat niet op het gepubliceerde rooster. Kijk bij Mijn rooster of er een open plek is.
               </p>
             )}
           </div>
@@ -139,13 +140,8 @@ function Overzicht() {
         <BeschikbaarheidMelding />
         {/* Kerncijfers */}
         <section aria-label="Kerncijfers" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Stat label="Trainingen deze week" value={`${SESSIES.length * GROEPEN.length}`} sub={`${SESSIES.length} momenten × ${GROEPEN.length} groepen`} />
-          <Stat
-            label="Open plekken"
-            value={String(openPlekken.length)}
-            sub="komende 2 weken"
-            tone={openPlekken.length ? 'warn' : 'ok'}
-          />
+          <Stat label="Trainingen deze week" value={String(deezeWeek.length)} sub="volgens het rooster" />
+          <Stat label="Open plekken" value={String(openPlekken)} sub="komende 2 weken" tone={openPlekken ? 'warn' : 'ok'} />
           <Stat label="Gezwommen afgelopen 7 dagen" value={`${(meters / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} km`} sub={`${recent.length} trainingen gelogd`} />
           <Stat label="Periode" value={periode?.naam ?? '—'} sub={periode ? `t/m ${formatShort(periode.tot)}` : ''} small />
         </section>
@@ -156,7 +152,7 @@ function Overzicht() {
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle className="text-xl font-extrabold">Deze week in het bad</CardTitle>
-                <CardDescription>Wie geeft welke groep, week {isoWeekNumber(week)}</CardDescription>
+                <CardDescription>Wie geeft training in week {isoWeekNumber(week)}</CardDescription>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link to="/rooster">
@@ -165,37 +161,44 @@ function Overzicht() {
               </Button>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-3">
-              {SESSIES.map((sessie) => {
-                const slots = rooster.filter((s) => s.sessieId === sessie.id)
-                const voorbij = slots[0].datum < vandaag
+              {deezeWeek.length === 0 && (
+                <p className="text-sm text-muted-foreground sm:col-span-3">Er is nog geen gepubliceerd rooster voor deze week.</p>
+              )}
+              {deezeWeek.map((g) => {
+                const t = g.training
+                const ids = g.indeling?.trainers ?? []
                 return (
-                  <div key={sessie.id} className={`rounded-xl border p-4 ${voorbij ? 'opacity-60' : ''}`}>
-                    <p className="text-sm font-extrabold">{sessie.dag}</p>
+                  <div key={`${g.periode.id}|${t.key}`} className={`rounded-xl border p-4 ${t.datum < vandaag ? 'opacity-60' : ''}`}>
+                    <p className="text-sm font-extrabold capitalize">{DAGEN[dagVan(t.datum)]}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatShort(slots[0].datum)} · {sessie.start}
+                      {formatShort(t.datum)} · {t.start}
+                      {t.feestdag ? ` · ${t.feestdag}` : ''}
                     </p>
                     <ul className="mt-3 space-y-2.5">
-                      {slots.map((slot) => {
-                        const t = trainerById(slot.trainerId)
+                      {ids.map((id) => {
+                        const tr = trainerById(id)
                         return (
-                          <li key={slot.groepId} className="flex items-center gap-2 text-sm">
-                            {t ? (
-                              <TrainerAvatar trainer={t} size="sm" />
-                            ) : (
-                              <span className="inline-flex size-8 items-center justify-center rounded-full border-2 border-dashed border-primary text-xs font-bold text-primary">
-                                ?
-                              </span>
-                            )}
-                            <span className="min-w-0 leading-tight">
-                              <span className="block truncate font-semibold">{t ? t.naam.split(' ')[0] : 'Open'}</span>
-                              <span className="block text-xs text-muted-foreground">{groepById(slot.groepId).naam}</span>
-                            </span>
-                            {slot.afwezig && (
-                              <AlertTriangle className="ml-auto size-4 text-nat-orange" aria-label={`Afwezig: ${slot.afwezig}`} />
-                            )}
+                          <li key={id} className="flex items-center gap-2 text-sm">
+                            {tr && <TrainerAvatar trainer={tr} size="sm" />}
+                            <span className="truncate font-semibold">{tr ? tr.naam.split(' ')[0] : 'Oud-trainer'}</span>
                           </li>
                         )
                       })}
+                      {g.indeling?.extern && <li className="text-sm font-semibold">{g.indeling.extern} (extern)</li>}
+                      {g.indeling?.zelf && <li className="text-sm font-semibold">Zwemmers trainen zelf</li>}
+                      {Array.from({ length: g.open }).map((_, i) => (
+                        <li key={`open-${i}`} className="flex items-center gap-2 text-sm">
+                          <span className="inline-flex size-8 items-center justify-center rounded-full border-2 border-dashed border-primary text-xs font-bold text-primary">
+                            ?
+                          </span>
+                          <span className="font-semibold text-primary">Open</span>
+                        </li>
+                      ))}
+                      {!g.toezichtOk && (
+                        <li className="flex items-center gap-1.5 text-xs font-semibold text-nat-orange">
+                          <AlertTriangle className="size-3.5" aria-hidden /> Geen toezicht
+                        </li>
+                      )}
                     </ul>
                   </div>
                 )

@@ -1,3 +1,4 @@
+// Fix: fix-11 — externe trainer en "zwemmers trainen zelf" in het indeelvenster
 // Fix: fix-10 — indelen door de coördinator; na publicatie het rooster voor iedereen
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, Minus, Plus, Send, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
@@ -18,6 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { geeftTraining, type Trainer } from '@/data/fixtures'
@@ -26,6 +29,7 @@ import {
   maakVoorstel,
   maandVan,
   nodigVoor,
+  openPlekken,
   tellingen,
   toezichtNaam,
   type Indeling,
@@ -363,7 +367,6 @@ function TrainingKaart({
 }) {
   const data = useAppData()
   const ids = indeling?.trainers ?? []
-  const nodig = nodigVoor(t, indeling)
   const ernstig = waarschuwingen.some((w) => w.ernstig && w.soort !== 'feestdag')
   const mijn = ids.includes(ikId)
   const toezicht = toezichtNaam(indeling?.toezicht, data.trainers, data.toezichthouders)
@@ -405,7 +408,24 @@ function TrainingKaart({
             </span>
           )
         })}
-        {Array.from({ length: Math.max(0, nodig - ids.length) }).map((_, i) => (
+        {indeling?.extern && (
+          <span className="flex min-h-8 items-center gap-2 rounded-md border bg-background px-2 text-sm">
+            <UserPlus className="size-4 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{indeling.extern} (extern)</span>
+            {indeling.externToezicht && <ShieldCheck className="size-3.5 shrink-0 text-nat-blue" aria-label="Toezichthouder" />}
+          </span>
+        )}
+        {indeling?.zelf && (
+          <span className="flex min-h-8 items-center gap-2 rounded-md border border-nat-blue/50 bg-nat-blue/10 px-2 text-sm font-semibold">
+            Zwemmers trainen zelf
+            {indeling.schema && (
+              <span className="truncate font-normal text-muted-foreground">
+                · {data.trainingen.find((x) => x.id === indeling.schema)?.titel ?? 'schema'}
+              </span>
+            )}
+          </span>
+        )}
+        {Array.from({ length: openPlekken(t, indeling) }).map((_, i) => (
           <span
             key={`open-${i}`}
             className="flex min-h-8 items-center gap-2 rounded-md border border-dashed border-destructive px-2 text-sm font-semibold text-destructive"
@@ -472,6 +492,10 @@ function IndelenDialog({
   const [gekozen, setGekozen] = useState<string[]>(huidig?.trainers ?? [])
   const [nodig, setNodig] = useState(nodigVoor(t, huidig))
   const [toezicht, setToezicht] = useState(huidig?.toezicht ?? 'auto')
+  const [extern, setExtern] = useState(huidig?.extern ?? '')
+  const [externToezicht, setExternToezicht] = useState(huidig?.externToezicht ?? false)
+  const [zelf, setZelf] = useState(huidig?.zelf ?? false)
+  const [schema, setSchema] = useState(huidig?.schema ?? 'geen')
   const [bezig, setBezig] = useState(false)
   const tel = tellingen(trainingen, periode.indeling)
   const maand = maandVan(t.datum)
@@ -498,9 +522,14 @@ function IndelenDialog({
     setBezig(true)
     try {
       await zetIndeling(periode.id, t.key, {
-        trainers: gekozen,
-        nodig: nodig !== t.trainersNodig ? nodig : undefined,
+        trainers: zelf ? [] : gekozen,
+        // Altijd opslaan: na publicatie controleren de regels hierop bij overnemen.
+        nodig,
         toezicht: toezicht === 'auto' ? null : toezicht,
+        extern: zelf ? undefined : extern.trim().slice(0, 60) || undefined,
+        externToezicht,
+        zelf,
+        schema: zelf && schema !== 'geen' ? schema : undefined,
       })
       toast.success('Indeling opgeslagen')
       onClose()
@@ -511,7 +540,8 @@ function IndelenDialog({
     }
   }
 
-  const bevoegdIngedeeld = gekozen.some((id) => trainerById(id)?.toezichthouder)
+  const bevoegdIngedeeld =
+    !zelf && (gekozen.some((id) => trainerById(id)?.toezichthouder) || (!!extern.trim() && externToezicht))
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -557,6 +587,36 @@ function IndelenDialog({
           </span>
         </div>
 
+        <div className="space-y-2 rounded-lg border p-3">
+          <label className="flex items-start gap-3">
+            <Checkbox checked={zelf} onCheckedChange={(v) => setZelf(v === true)} className="mt-0.5" />
+            <span>
+              <span className="block font-semibold">Zwemmers trainen zelf</span>
+              <span className="block text-xs text-muted-foreground">Geen trainer, wel een toezichthouder. Kies eventueel een schema.</span>
+            </span>
+          </label>
+          {zelf && (
+            <Select value={schema} onValueChange={setSchema}>
+              <SelectTrigger aria-label="Schema" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="geen">Nog geen schema gekozen</SelectItem>
+                {[...data.trainingen]
+                  .sort((a, b) => b.datum.localeCompare(a.datum))
+                  .slice(0, 30)
+                  .map((x) => (
+                    <SelectItem key={x.id} value={x.id}>
+                      {x.titel} ({formatShort(x.datum)})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {!zelf && (
+          <>
         <ul className="space-y-1.5" aria-label="Trainers">
           {kandidaten.map(({ tr, keuze, kanNiet, inMaand, max }) => {
             const aan = gekozen.includes(tr.id)
@@ -605,6 +665,25 @@ function IndelenDialog({
           })}
         </ul>
 
+        <div className="space-y-2 rounded-lg border p-3">
+          <Label htmlFor="extern">Externe trainer (optioneel)</Label>
+          <Input
+            id="extern"
+            placeholder="Naam, bijv. trainer van een andere club"
+            maxLength={60}
+            value={extern}
+            onChange={(e) => setExtern(e.target.value)}
+          />
+          {extern.trim() && (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={externToezicht} onCheckedChange={(v) => setExternToezicht(v === true)} />
+              Is bevoegd toezichthouder
+            </label>
+          )}
+        </div>
+          </>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="toezicht">Toezichthouder</Label>
           <Select value={toezicht} onValueChange={setToezicht}>
@@ -613,7 +692,7 @@ function IndelenDialog({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="auto">
-                {bevoegdIngedeeld ? 'Een ingedeelde trainer (bevoegd)' : 'Automatisch: nog niemand bevoegd!'}
+                {bevoegdIngedeeld ? 'Een ingedeelde (bevoegde) trainer' : 'Automatisch: nog niemand bevoegd!'}
               </SelectItem>
               <SelectGroup>
                 <SelectLabel>Groep toezichthouders</SelectLabel>
@@ -645,7 +724,7 @@ function IndelenDialog({
             Annuleren
           </Button>
           <Button disabled={bezig} onClick={opslaan}>
-            Opslaan ({gekozen.length} van {nodig})
+            {zelf ? 'Opslaan' : `Opslaan (${gekozen.length + (extern.trim() ? 1 : 0)} van ${nodig})`}
           </Button>
         </DialogFooter>
       </DialogContent>
