@@ -1,7 +1,8 @@
+// Fix: fix-8 — knop: testbeschikbaarheid voor testtrainers
 // Fix: fix-7 — beschikbaarheid via eigen pagina; feestdagen signaleren
 // Fix: fix-5 — één roosterperiode: instellingen, beschikbaarheid opgeven, wie kan wanneer
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, CalendarCheck, CalendarX, CircleCheck, PartyPopper, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, CalendarX, CircleCheck, FlaskConical, PartyPopper, Plus, Save, Trash2 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -33,7 +34,14 @@ import {
   type PeriodeTraining,
   type Roosterperiode,
 } from '@/data/rooster'
-import { trainerById, useAppData, verwijderPeriode, werkPeriodeBijRooster } from '@/data/store'
+import {
+  trainerById,
+  useAppData,
+  verwijderPeriode,
+  vulTestbeschikbaarheidIn,
+  werkPeriodeBijRooster,
+  wisTestbeschikbaarheid,
+} from '@/data/store'
 import { formatLong, formatRange, formatShort } from '@/lib/dates'
 
 export const Route = createFileRoute('/periodes/$periodeId')({
@@ -185,6 +193,9 @@ function PeriodePagina() {
           }
         >
           <WieKanWanneer periode={periode} />
+          {ik.coordinator && data.trainers.some((t) => t.test) && (
+            <TestKnoppen periode={periode} sleutels={sleutels} />
+          )}
         </Sectie>
       </div>
     </>
@@ -657,6 +668,55 @@ function Feestdagen({
           )}
         </>
       )}
+    </div>
+  )
+}
+
+function TestKnoppen({ periode, sleutels }: { periode: Roosterperiode; sleutels: string[] }) {
+  const [bezig, setBezig] = useState(false)
+
+  async function uitvoeren(actie: () => Promise<unknown>, melding: string) {
+    setBezig(true)
+    try {
+      await actie()
+      toast.success(melding)
+    } catch {
+      toast.error('Dat lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-2 rounded-xl border border-dashed p-4">
+      <p className="flex items-center gap-2 text-sm font-bold">
+        <FlaskConical className="size-4 text-primary" aria-hidden /> Testen
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Geef alle testtrainers in één keer een willekeurige beschikbaarheid, om het indelen te kunnen uitproberen.
+        Echte trainers blijven ongemoeid.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          disabled={bezig || sleutels.length === 0}
+          onClick={() =>
+            uitvoeren(
+              () => vulTestbeschikbaarheidIn(periode, sleutels),
+              'Testtrainers hebben een beschikbaarheid gekregen',
+            )
+          }
+        >
+          <FlaskConical aria-hidden /> Testbeschikbaarheid invullen
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={bezig}
+          onClick={() => uitvoeren(() => wisTestbeschikbaarheid(periode.id), 'Testbeschikbaarheid gewist')}
+        >
+          Testbeschikbaarheid wissen
+        </Button>
+      </div>
     </div>
   )
 }

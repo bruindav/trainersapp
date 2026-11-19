@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-8 — testbeschikbaarheid voor testtrainers.
  * Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
  * Fix: fix-3 — rollen en taken, toezichthouders, migratie van 'Hoofdtrainer'.
  *
@@ -675,4 +676,66 @@ export async function bewaarBeschikbaarheid(
     bijgewerktOp: serverTimestamp(),
     bijgewerktDoor: state.huidigeTrainerId,
   })
+}
+
+// ---------------------------------------------------------------------------
+// Fix: fix-8 — testbeschikbaarheid (alleen testtrainers, om het rooster te testen)
+// ---------------------------------------------------------------------------
+
+/** Eenvoudige voorspelbare toevalsgenerator, zodat dezelfde trainer steeds iets vergelijkbaars krijgt. */
+function toeval(zaad: string) {
+  let h = 2166136261
+  for (const c of zaad) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    return ((h ^= h >>> 16) >>> 0) / 4294967296
+  }
+}
+
+/** Geeft alle testtrainers een willekeurige, realistische beschikbaarheid voor deze periode. */
+export async function vulTestbeschikbaarheidIn(periode: Roosterperiode, sleutels: string[]) {
+  const db = getDb()
+  const batch = writeBatch(db)
+  const test = state.trainers.filter((t) => t.test && t.rol !== 'Geen training')
+  test.forEach((t) => {
+    const r = toeval(`${periode.id}|${t.id}`)
+    const keuzes: Record<string, Keuze> = {}
+    sleutels.forEach((s) => {
+      const x = r()
+      keuzes[s] = x < 0.45 ? 'graag' : x < 0.7 ? 'kan' : 'nee'
+    })
+    // Zorg dat iedereen minstens één keer 'graag' heeft.
+    if (sleutels.length > 0 && !Object.values(keuzes).includes('graag')) {
+      keuzes[sleutels[Math.floor(r() * sleutels.length)]] = 'graag'
+    }
+    const maxOpties = [null, 2, 3, 3, 4]
+    const nietKunnen: DatumBereik[] = []
+    if (r() < 0.6) {
+      // Eén vakantieweek ergens in de periode.
+      const dagen = Math.max(0, Math.round((Date.parse(periode.tot) - Date.parse(periode.van)) / 86400000) - 7)
+      const start = new Date(Date.parse(periode.van) + Math.floor(r() * dagen) * 86400000)
+      const eind = new Date(start.valueOf() + 6 * 86400000)
+      nietKunnen.push({ van: start.toISOString().slice(0, 10), tot: eind.toISOString().slice(0, 10) })
+    }
+    batch.set(doc(db, 'roosterperiodes', periode.id, 'beschikbaarheid', t.id), {
+      keuzes,
+      maxPerMaand: maxOpties[Math.floor(r() * maxOpties.length)],
+      nietKunnen,
+      bijgewerktOp: serverTimestamp(),
+      bijgewerktDoor: state.huidigeTrainerId,
+    })
+  })
+  await batch.commit()
+  return test.length
+}
+
+/** Wist de beschikbaarheid van alle testtrainers voor deze periode. */
+export async function wisTestbeschikbaarheid(periodeId: string) {
+  const db = getDb()
+  const batch = writeBatch(db)
+  state.trainers
+    .filter((t) => t.test)
+    .forEach((t) => batch.delete(doc(db, 'roosterperiodes', periodeId, 'beschikbaarheid', t.id)))
+  await batch.commit()
 }
