@@ -1,3 +1,4 @@
+// Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht)
 // Fix: fix-2 — testtrainers
 // Fix: fix-1 — voorbeelddata vervangen door Firestore; dit bestand bevat nu
 // de domeintypes, de vaste clubgegevens (sessies, groepen) en het
@@ -8,9 +9,24 @@ import { addDays } from '@/lib/dates'
 // Types
 // ---------------------------------------------------------------------------
 
-export type TrainerRol = 'Hoofdtrainer' | 'Trainer' | 'Assistent-trainer'
+/** Of en hoe iemand training geeft. */
+export type TrainerRol = 'Trainer' | 'Assistent-trainer' | 'Geen training'
 
-export interface Trainer {
+/** Taken die los van de rol aan iemand worden gegeven. */
+export interface Taken {
+  /** Deelt het rooster in; mag alles, ook team en jaarplan. */
+  coordinator: boolean
+  /** Maakt en beheert het jaarplan. */
+  jaarplanBeheer: boolean
+  /** Nodigt uit en beheert rollen/taken (door de coördinator gedelegeerd). */
+  teamBeheer: boolean
+  /** Heeft de toezichthouder-bevoegdheid. */
+  toezichthouder: boolean
+}
+
+export const GEEN_TAKEN: Taken = { coordinator: false, jaarplanBeheer: false, teamBeheer: false, toezichthouder: false }
+
+export interface Trainer extends Taken {
   id: string
   naam: string
   initialen: string
@@ -20,6 +36,29 @@ export interface Trainer {
   email?: string
   /** Testtrainer zonder account (alleen om de app uit te proberen). */
   test?: boolean
+}
+
+export const TAAK_LABELS: Record<keyof Taken, string> = {
+  coordinator: 'Coördinator',
+  jaarplanBeheer: 'Jaarplan',
+  teamBeheer: 'Teambeheer',
+  toezichthouder: 'Toezichthouder',
+}
+
+export const magTeamBeheren = (t: Taken | undefined) => !!t && (t.coordinator || t.teamBeheer)
+export const magJaarplanBewerken = (t: Taken | undefined) => !!t && (t.coordinator || t.jaarplanBeheer)
+export const geeftTraining = (t: Pick<Trainer, 'rol'>) => t.rol !== 'Geen training'
+
+/** Korte omschrijving, bijv. "Trainer · Coördinator". */
+export function rolLabel(t: Pick<Trainer, 'rol' | 'coordinator'>) {
+  return t.coordinator ? `${t.rol === 'Geen training' ? 'Coördinator' : `${t.rol} · Coördinator`}` : t.rol
+}
+
+/** Een toezichthouder uit de aparte groep van de club (nog zonder account). */
+export interface Toezichthouder {
+  id: string
+  naam: string
+  notitie: string
 }
 
 /** Testtrainers die de hoofdtrainer met één knop kan toevoegen en verwijderen. */
@@ -35,10 +74,10 @@ export const TESTTRAINERS = [
   'Daphne Z',
 ] as const
 
-export const ALLE_ROLLEN: TrainerRol[] = ['Hoofdtrainer', 'Trainer', 'Assistent-trainer']
+export const ALLE_ROLLEN: TrainerRol[] = ['Trainer', 'Assistent-trainer', 'Geen training']
 
 /** Een uitnodiging; het document-id is het e-mailadres in kleine letters. */
-export interface Uitnodiging {
+export interface Uitnodiging extends Taken {
   email: string
   naam: string
   rol: TrainerRol
@@ -347,6 +386,7 @@ export interface AppData {
   huidigeTrainerId: string
   trainers: Trainer[]
   uitnodigingen: Uitnodiging[]
+  toezichthouders: Toezichthouder[]
   afwezigheden: Afwezigheid[]
   /** Handmatige wijzigingen bovenop de rotatie. `null` = open plek. */
   roosterWijzigingen: Record<string, string | null>

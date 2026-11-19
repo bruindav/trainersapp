@@ -1,3 +1,4 @@
+// Fix: fix-3 — coördinator, taken, toezichthouders, migratie oude hoofdtrainer
 // Fix: fix-2 — testtrainers
 // Fix: fix-1 — tests voor firestore.rules (pnpm test:rules)
 import { readFileSync } from 'node:fs'
@@ -24,8 +25,8 @@ const JAARPLAN = {
 }
 const TRAINER = { uid: 'trainer', email: 'trainer@nat.nl' }
 
-function trainerDoc(naam: string, rol: string, email: string) {
-  return { naam, initialen: 'XX', kleur: '#e64439', rol, specialiteit: '', email }
+function trainerDoc(naam: string, rol: string, email: string, extra: Record<string, unknown> = {}) {
+  return { naam, initialen: 'XX', kleur: '#e64439', rol, specialiteit: '', email, ...extra }
 }
 
 function als(u: { uid: string; email: string }, verified = true) {
@@ -50,16 +51,19 @@ beforeEach(async () => env.clearFirestore())
 async function standaardTeam() {
   await seed(async (db) => {
     await setDoc(doc(db, 'config', 'setup'), { hoofdtrainerUid: HOOFD.uid })
-    await setDoc(doc(db, 'trainers', HOOFD.uid), trainerDoc('Hoofd', 'Hoofdtrainer', HOOFD.email))
+    await setDoc(doc(db, 'trainers', HOOFD.uid), trainerDoc('Coördinator', 'Trainer', HOOFD.email, { coordinator: true }))
     await setDoc(doc(db, 'trainers', TRAINER.uid), trainerDoc('Trainer', 'Trainer', TRAINER.email))
     await setDoc(doc(db, 'jaarplan', 'huidig'), JAARPLAN)
   })
 }
 
 describe('eerste inrichting', () => {
-  function inrichtBatch(db: ReturnType<typeof als>, uid: string, email: string, rol = 'Hoofdtrainer') {
+  function inrichtBatch(db: ReturnType<typeof als>, uid: string, email: string) {
     const b = writeBatch(db)
-    b.set(doc(db, 'trainers', uid), { ...trainerDoc('Eerste', rol, email), sinds: serverTimestamp() })
+    b.set(doc(db, 'trainers', uid), {
+      ...trainerDoc('Eerste', 'Geen training', email, { coordinator: true, jaarplanBeheer: true, teamBeheer: true }),
+      sinds: serverTimestamp(),
+    })
     b.set(doc(db, 'config', 'setup'), { hoofdtrainerUid: uid, op: serverTimestamp() })
     b.set(doc(db, 'jaarplan', 'huidig'), JAARPLAN)
     return b.commit()
@@ -82,7 +86,7 @@ describe('eerste inrichting', () => {
   })
   it('zonder config/setup kun je jezelf geen trainer maken', async () => {
     const x = { uid: 'x', email: 'x@x.nl' }
-    await assertFails(setDoc(doc(als(x), 'trainers', x.uid), trainerDoc('X', 'Hoofdtrainer', x.email)))
+    await assertFails(setDoc(doc(als(x), 'trainers', x.uid), trainerDoc('X', 'Trainer', x.email, { coordinator: true })))
   })
 })
 
@@ -130,9 +134,9 @@ describe('uitnodigingen', () => {
     await assertFails(getDoc(doc(als(TRAINER), 'uitnodigingen', NIEUW.email)))
   })
 
-  function verzilver(db: ReturnType<typeof als>, rol = 'Trainer') {
+  function verzilver(db: ReturnType<typeof als>, extra: Record<string, unknown> = {}) {
     const b = writeBatch(db)
-    b.set(doc(db, 'trainers', NIEUW.uid), trainerDoc('Nieuw', rol, NIEUW.email))
+    b.set(doc(db, 'trainers', NIEUW.uid), trainerDoc('Nieuw', 'Trainer', NIEUW.email, extra))
     b.delete(doc(db, 'uitnodigingen', NIEUW.email))
     return b.commit()
   }
@@ -144,7 +148,8 @@ describe('uitnodigingen', () => {
   })
   it('kan zichzelf daarbij geen hogere rol geven', async () => {
     await seed(async (db) => setDoc(doc(db, 'uitnodigingen', NIEUW.email), uitnodiging))
-    await assertFails(verzilver(als(NIEUW), 'Hoofdtrainer'))
+    await assertFails(verzilver(als(NIEUW), { coordinator: true }))
+    await assertFails(verzilver(als(NIEUW), { rol: 'Geen training' }))
   })
   it('niet zonder geverifieerd e-mailadres', async () => {
     await seed(async (db) => setDoc(doc(db, 'uitnodigingen', NIEUW.email), uitnodiging))
@@ -161,15 +166,20 @@ describe('uitnodigingen', () => {
 describe('team beheren', () => {
   beforeEach(standaardTeam)
 
-  it('hoofdtrainer kan rol van een ander wijzigen, trainer niet', async () => {
+  it('coördinator kan rol van een ander wijzigen, trainer niet', async () => {
     await assertSucceeds(updateDoc(doc(als(HOOFD), 'trainers', TRAINER.uid), { rol: 'Assistent-trainer' }))
-    await assertFails(updateDoc(doc(als(TRAINER), 'trainers', TRAINER.uid), { rol: 'Hoofdtrainer' }))
+    await assertFails(updateDoc(doc(als(TRAINER), 'trainers', TRAINER.uid), { coordinator: true }))
   })
-  it('hoofdtrainer kan de eigen rol niet wijzigen of zichzelf verwijderen', async () => {
-    await assertFails(updateDoc(doc(als(HOOFD), 'trainers', HOOFD.uid), { rol: 'Trainer' }))
+  it('coördinator kan zichzelf de coördinatortaak niet afnemen en zichzelf niet verwijderen', async () => {
+    await assertFails(updateDoc(doc(als(HOOFD), 'trainers', HOOFD.uid), { coordinator: false }))
+    await assertSucceeds(updateDoc(doc(als(HOOFD), 'trainers', HOOFD.uid), { rol: 'Geen training' }))
     await assertFails(deleteDoc(doc(als(HOOFD), 'trainers', HOOFD.uid)))
   })
-  it('alleen de hoofdtrainer kan testtrainers (zonder account) toevoegen', async () => {
+  it('ongeldige rol of taak wordt geweigerd', async () => {
+    await assertFails(updateDoc(doc(als(HOOFD), 'trainers', TRAINER.uid), { rol: 'Hoofdtrainer' }))
+    await assertFails(updateDoc(doc(als(HOOFD), 'trainers', TRAINER.uid), { toezichthouder: 'ja' }))
+  })
+  it('alleen wie het team beheert kan testtrainers (zonder account) toevoegen', async () => {
     const test = { ...trainerDoc('Aalder Mellema', 'Trainer', ''), test: true }
     await assertFails(setDoc(doc(als(TRAINER), 'trainers', 'test-aalder-mellema'), test))
     await assertSucceeds(setDoc(doc(als(HOOFD), 'trainers', 'test-aalder-mellema'), test))
@@ -181,6 +191,61 @@ describe('team beheren', () => {
   })
   it('config/setup kan niet worden gewijzigd', async () => {
     await assertFails(setDoc(doc(als(HOOFD), 'config', 'setup'), { hoofdtrainerUid: 'x', op: null }))
+  })
+})
+
+describe('teambeheer (gedelegeerd)', () => {
+  const TEAM = { uid: 'team', email: 'team@nat.nl' }
+  beforeEach(async () => {
+    await standaardTeam()
+    await seed(async (db) => setDoc(doc(db, 'trainers', TEAM.uid), trainerDoc('Team', 'Trainer', TEAM.email, { teamBeheer: true })))
+  })
+  const uitnodiging = (extra: Record<string, unknown> = {}) => ({
+    email: 'x@nat.nl', naam: 'X', rol: 'Trainer', kleur: '#2f8fc0', specialiteit: '', uitgenodigdOp: '2026-11-19', ...extra,
+  })
+
+  it('kan gewone teamleden uitnodigen, maar geen coördinator of teambeheerder', async () => {
+    await assertSucceeds(setDoc(doc(als(TEAM), 'uitnodigingen', 'x@nat.nl'), uitnodiging({ toezichthouder: true })))
+    await assertFails(setDoc(doc(als(TEAM), 'uitnodigingen', 'y@nat.nl'), uitnodiging({ email: 'y@nat.nl', coordinator: true })))
+    await assertFails(setDoc(doc(als(TEAM), 'uitnodigingen', 'z@nat.nl'), uitnodiging({ email: 'z@nat.nl', teamBeheer: true })))
+  })
+  it('kan taken van een trainer wijzigen, maar geen zware taken en niet bij de coördinator', async () => {
+    await assertSucceeds(updateDoc(doc(als(TEAM), 'trainers', TRAINER.uid), { toezichthouder: true, jaarplanBeheer: true }))
+    await assertFails(updateDoc(doc(als(TEAM), 'trainers', TRAINER.uid), { teamBeheer: true }))
+    await assertFails(updateDoc(doc(als(TEAM), 'trainers', TEAM.uid), { coordinator: true }))
+    await assertFails(updateDoc(doc(als(TEAM), 'trainers', HOOFD.uid), { rol: 'Geen training' }))
+    await assertFails(deleteDoc(doc(als(TEAM), 'trainers', HOOFD.uid)))
+    await assertSucceeds(deleteDoc(doc(als(TEAM), 'trainers', TRAINER.uid)))
+  })
+  it('gewone trainer kan het team niet beheren', async () => {
+    await assertFails(setDoc(doc(als(TRAINER), 'uitnodigingen', 'x@nat.nl'), uitnodiging()))
+    await assertFails(updateDoc(doc(als(TRAINER), 'trainers', TEAM.uid), { toezichthouder: true }))
+  })
+})
+
+describe('jaarplan, toezichthouders en oude hoofdtrainer', () => {
+  beforeEach(standaardTeam)
+  const JAAR = { uid: 'jaar', email: 'jaar@nat.nl' }
+  const OUD = { uid: 'oud', email: 'oud@nat.nl' }
+
+  it('jaarplanbeheerder mag het jaarplan bewerken', async () => {
+    await seed(async (db) => setDoc(doc(db, 'trainers', JAAR.uid), trainerDoc('Jaar', 'Trainer', JAAR.email, { jaarplanBeheer: true })))
+    await assertSucceeds(setDoc(doc(als(JAAR), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 3 }))
+  })
+  it('alleen teambeheer beheert de groep toezichthouders; iedere trainer leest', async () => {
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'toezichthouders', 'z1'), { naam: 'Toos', notitie: '' }))
+    await assertSucceeds(getDoc(doc(als(TRAINER), 'toezichthouders', 'z1')))
+    await assertFails(setDoc(doc(als(TRAINER), 'toezichthouders', 'z2'), { naam: 'Kees', notitie: '' }))
+    await assertFails(setDoc(doc(als(HOOFD), 'toezichthouders', 'z3'), { naam: 'Kees', telefoon: '06' }))
+  })
+  it('een oude hoofdtrainer telt als coördinator en kan zichzelf omzetten', async () => {
+    await seed(async (db) => setDoc(doc(db, 'trainers', OUD.uid), trainerDoc('Oud', 'Hoofdtrainer', OUD.email)))
+    await assertSucceeds(setDoc(doc(als(OUD), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 4 }))
+    await assertSucceeds(
+      updateDoc(doc(als(OUD), 'trainers', OUD.uid), {
+        rol: 'Trainer', coordinator: true, jaarplanBeheer: true, teamBeheer: true, toezichthouder: false,
+      }),
+    )
   })
 })
 
@@ -236,7 +301,7 @@ describe('rooster, trainingen en jaarplan', () => {
     await assertFails(deleteDoc(doc(als(TRAINER), 'trainingen', 't2')))
     await assertSucceeds(deleteDoc(doc(als(HOOFD), 'trainingen', 't2')))
   })
-  it('alleen de hoofdtrainer wijzigt het jaarplan', async () => {
+  it('alleen coördinator of jaarplanbeheerder wijzigt het jaarplan', async () => {
     await assertFails(setDoc(doc(als(TRAINER), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 2 }))
     await assertSucceeds(setDoc(doc(als(HOOFD), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 2 }))
     await assertFails(setDoc(doc(als(HOOFD), 'jaarplan', 'anders'), { ...JAARPLAN, versie: 2 }))

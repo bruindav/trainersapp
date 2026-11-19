@@ -1,3 +1,4 @@
+// Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
 import { CalendarRange, ClipboardList, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
@@ -17,6 +18,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { logUit } from '@/data/auth'
 import { trainerById, useAppData } from '@/data/store'
+import { rolLabel } from '@/data/fixtures'
 import { TrainerAvatar } from './trainer-avatar'
 
 const NAV = [
@@ -62,7 +64,7 @@ function AccountMenu() {
           <TrainerAvatar trainer={ik} size="sm" />
           <span className="hidden text-left text-sm leading-tight lg:block">
             <span className="block font-semibold">{ik.naam.split(' ')[0]}</span>
-            <span className="block text-xs text-muted-foreground">{ik.rol}</span>
+            <span className="block text-xs text-muted-foreground">{rolLabel(ik)}</span>
           </span>
         </Button>
       </DropdownMenuTrigger>
@@ -71,7 +73,7 @@ function AccountMenu() {
           <TrainerAvatar trainer={ik} size="md" />
           <span className="min-w-0 leading-tight">
             <span className="block truncate font-semibold">{ik.naam}</span>
-            <span className="block text-xs text-muted-foreground">{ik.rol}</span>
+            <span className="block text-xs text-muted-foreground">{rolLabel(ik)}</span>
             {ik.email && <span className="block truncate text-xs text-muted-foreground">{ik.email}</span>}
           </span>
         </DropdownMenuLabel>

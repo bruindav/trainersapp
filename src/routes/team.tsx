@@ -1,8 +1,9 @@
+// Fix: fix-3 — rollen en taken (coördinator, jaarplan, teambeheer, toezicht), groep toezichthouders
 // Fix: fix-2 — testtrainers toevoegen en verwijderen
 // Fix: fix-1 — Team: trainers bekijken; hoofdtrainer nodigt uit en beheert rollen
 import { createFileRoute } from '@tanstack/react-router'
-import { FlaskConical, Mail, MoreHorizontal, UserPlus } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { FlaskConical, Mail, MoreHorizontal, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -11,7 +12,8 @@ import { TrainerAvatar } from '@/components/trainer-avatar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -22,8 +24,10 @@ import {
 } from '@/components/ui/dialog'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -38,8 +42,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   ALLE_ROLLEN,
-  TRAINER_KLEUREN,
+  GEEN_TAKEN,
+  TAAK_LABELS,
   TESTTRAINERS,
+  TRAINER_KLEUREN,
+  magTeamBeheren,
+  type Taken,
   type Trainer,
   type TrainerRol,
   type Uitnodiging,
@@ -51,9 +59,11 @@ import {
   trekUitnodigingIn,
   useAppData,
   verwijderTesttrainers,
+  verwijderToezichthouder,
   verwijderTrainer,
   voegTesttrainersToe,
-  wijzigRol,
+  voegToezichthouderToe,
+  wijzigTrainer,
 } from '@/data/store'
 import { formatShort } from '@/lib/dates'
 
@@ -61,18 +71,34 @@ export const Route = createFileRoute('/team')({
   component: TeamPagina,
 })
 
+const TAKEN: (keyof Taken)[] = ['coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder']
+/** Taken die alleen de coördinator mag toekennen. */
+const ALLEEN_COORDINATOR: (keyof Taken)[] = ['coordinator', 'teamBeheer']
+
 function voornaam(naam: string) {
   return naam.split(' ')[0]
 }
 
-function RolBadge({ rol }: { rol: TrainerRol }) {
-  return <Badge variant={rol === 'Hoofdtrainer' ? 'default' : 'outline'}>{rol}</Badge>
+function RolEnTaken({ t }: { t: Trainer | Uitnodiging }) {
+  return (
+    <>
+      <Badge variant={t.rol === 'Geen training' ? 'secondary' : 'outline'}>{t.rol}</Badge>
+      {t.coordinator && <Badge>Coördinator</Badge>}
+      {t.jaarplanBeheer && <Badge variant="outline">Jaarplan</Badge>}
+      {t.teamBeheer && !t.coordinator && <Badge variant="outline">Teambeheer</Badge>}
+      {t.toezichthouder && (
+        <Badge variant="outline" className="gap-1">
+          <ShieldCheck className="size-3" aria-hidden /> Toezicht
+        </Badge>
+      )}
+    </>
+  )
 }
 
 function TeamPagina() {
   const data = useAppData()
   const ik = trainerById(data.huidigeTrainerId)!
-  const isHoofd = ik.rol === 'Hoofdtrainer'
+  const magBeheren = magTeamBeheren(ik)
   const [uitnodigen, setUitnodigen] = useState(false)
   const [teVerwijderen, setTeVerwijderen] = useState<Trainer | null>(null)
   const [inTeTrekken, setInTeTrekken] = useState<Uitnodiging | null>(null)
@@ -85,30 +111,30 @@ function TeamPagina() {
         eyebrow="Trainersteam"
         title="Team"
         description={
-          isHoofd
-            ? `${data.trainers.length} trainers · ${aantalUitnodigingen} openstaande ${aantalUitnodigingen === 1 ? 'uitnodiging' : 'uitnodigingen'}`
-            : `${data.trainers.length} trainers`
+          magBeheren
+            ? `${data.trainers.length} teamleden · ${aantalUitnodigingen} openstaande ${aantalUitnodigingen === 1 ? 'uitnodiging' : 'uitnodigingen'}`
+            : `${data.trainers.length} teamleden`
         }
         actions={
-          isHoofd && (
+          magBeheren && (
             <Button size="lg" className="w-full rounded-full sm:w-auto" onClick={() => setUitnodigen(true)}>
-              <UserPlus aria-hidden /> Trainer uitnodigen
+              <UserPlus aria-hidden /> Teamlid uitnodigen
             </Button>
           )
         }
       />
 
       <div className="mx-auto max-w-content space-y-6 px-4 py-8 sm:px-6">
-        {!isHoofd && (
+        {!magBeheren && (
           <Alert>
-            <AlertDescription>Alleen de hoofdtrainer kan het team wijzigen.</AlertDescription>
+            <AlertDescription>Alleen de coördinator (of wie teambeheer heeft) kan het team wijzigen.</AlertDescription>
           </Alert>
         )}
 
         <Card>
           <CardHeader>
             <CardTitle>
-              <h2 className="text-lg font-bold">Trainers</h2>
+              <h2 className="text-lg font-bold">Teamleden</h2>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -116,35 +142,37 @@ function TeamPagina() {
               {data.trainers.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-3">
                   <TrainerAvatar trainer={t} size="md" />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 font-semibold">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="font-semibold">
                       {t.naam}
-                      {t.id === ik.id && <span className="text-sm font-normal text-muted-foreground">(jij)</span>}
-                      <RolBadge rol={t.rol} />
+                      {t.id === ik.id && <span className="ml-1 text-sm font-normal text-muted-foreground">(jij)</span>}
+                    </p>
+                    <p className="flex flex-wrap gap-1.5">
+                      <RolEnTaken t={t} />
                       {t.test && <Badge variant="secondary">Test</Badge>}
                     </p>
                     {t.specialiteit && <p className="truncate text-sm text-muted-foreground">{t.specialiteit}</p>}
                   </div>
-                  {isHoofd && (
-                    <TrainerActies trainer={t} isIk={t.id === ik.id} onVerwijder={() => setTeVerwijderen(t)} />
+                  {magBeheren && (ik.coordinator || !t.coordinator) && (
+                    <TeamlidActies trainer={t} ik={ik} onVerwijder={() => setTeVerwijderen(t)} />
                   )}
                 </li>
               ))}
             </ul>
-            {isHoofd && data.trainers.length <= 1 && (
+            {magBeheren && data.trainers.length <= 1 && (
               <div className="mt-4 rounded-lg border border-dashed p-6 text-center">
                 <p className="text-muted-foreground">Je bent nog de enige. Nodig je eerste collega uit.</p>
                 <Button className="mt-3" onClick={() => setUitnodigen(true)}>
-                  <UserPlus aria-hidden /> Trainer uitnodigen
+                  <UserPlus aria-hidden /> Teamlid uitnodigen
                 </Button>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {isHoofd && <TesttrainersKaart />}
+        <ToezichthoudersKaart magBeheren={magBeheren} />
 
-        {isHoofd && (
+        {magBeheren && (
           <Card>
             <CardHeader>
               <CardTitle>
@@ -159,17 +187,20 @@ function TeamPagina() {
                   {data.uitnodigingen.map((u) => (
                     <li key={u.email} className="flex flex-wrap items-center gap-3 py-3">
                       <Mail className="size-5 text-muted-foreground" aria-hidden />
-                      <div className="min-w-0 flex-1">
-                        <p className="flex flex-wrap items-center gap-2 font-semibold">
-                          {u.naam} <RolBadge rol={u.rol} />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-semibold">{u.naam}</p>
+                        <p className="flex flex-wrap gap-1.5">
+                          <RolEnTaken t={u} />
                         </p>
                         <p className="truncate text-sm text-muted-foreground">
                           {u.email} · uitgenodigd op {formatShort(u.uitgenodigdOp)}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => setInTeTrekken(u)}>
-                        Intrekken
-                      </Button>
+                      {(ik.coordinator || !u.coordinator) && (
+                        <Button variant="ghost" size="sm" onClick={() => setInTeTrekken(u)}>
+                          Intrekken
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -177,9 +208,11 @@ function TeamPagina() {
             </CardContent>
           </Card>
         )}
+
+        {magBeheren && <TesttrainersKaart />}
       </div>
 
-      {isHoofd && <UitnodigenDialog open={uitnodigen} onOpenChange={setUitnodigen} />}
+      {magBeheren && <UitnodigenDialog open={uitnodigen} onOpenChange={setUitnodigen} ikBenCoordinator={ik.coordinator} />}
 
       <Dialog open={!!teVerwijderen} onOpenChange={(o) => !o && setTeVerwijderen(null)}>
         <DialogContent>
@@ -245,6 +278,176 @@ function TeamPagina() {
   )
 }
 
+function TeamlidActies({ trainer, ik, onVerwijder }: { trainer: Trainer; ik: Trainer; onVerwijder: () => void }) {
+  const isIk = trainer.id === ik.id
+
+  async function wijzig(w: Partial<Taken> & { rol?: TrainerRol }, melding: string) {
+    try {
+      await wijzigTrainer(trainer.id, w)
+      toast.success(melding)
+    } catch {
+      toast.error('Wijzigen lukte niet. Probeer het opnieuw.')
+    }
+  }
+
+  function taakUitgeschakeld(taak: keyof Taken) {
+    if (ALLEEN_COORDINATOR.includes(taak) && !ik.coordinator) return true
+    // Een coördinator kan zichzelf niet de coördinatortaak afnemen: er blijft er altijd één.
+    if (isIk && taak === 'coordinator') return true
+    return false
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-11" aria-label={`Acties voor ${trainer.naam}`}>
+          <MoreHorizontal aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Rol</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              value={trainer.rol}
+              onValueChange={(rol) =>
+                rol !== trainer.rol &&
+                wijzig({ rol: rol as TrainerRol }, `${voornaam(trainer.naam)}: ${rol.toLowerCase()}`)
+              }
+            >
+              {ALLE_ROLLEN.map((r) => (
+                <DropdownMenuRadioItem key={r} value={r}>
+                  {r}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Taken</DropdownMenuLabel>
+        {TAKEN.map((taak) => (
+          <DropdownMenuCheckboxItem
+            key={taak}
+            checked={trainer[taak]}
+            disabled={taakUitgeschakeld(taak)}
+            onSelect={(e) => e.preventDefault()}
+            onCheckedChange={(aan) =>
+              wijzig(
+                { [taak]: aan === true },
+                `${voornaam(trainer.naam)}: ${TAAK_LABELS[taak].toLowerCase()} ${aan ? 'aan' : 'uit'}`,
+              )
+            }
+          >
+            {TAAK_LABELS[taak]}
+          </DropdownMenuCheckboxItem>
+        ))}
+        {!isIk && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={onVerwijder}>
+              Verwijderen uit team
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function ToezichthoudersKaart({ magBeheren }: { magBeheren: boolean }) {
+  const data = useAppData()
+  const [naam, setNaam] = useState('')
+  const [notitie, setNotitie] = useState('')
+  const [bezig, setBezig] = useState(false)
+
+  async function toevoegen(e: FormEvent) {
+    e.preventDefault()
+    if (!naam.trim()) return
+    setBezig(true)
+    try {
+      await voegToezichthouderToe(naam, notitie)
+      toast.success(`${naam.trim()} toegevoegd aan de toezichthouders`)
+      setNaam('')
+      setNotitie('')
+    } catch {
+      toast.error('Toevoegen lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <ShieldCheck className="size-5 text-primary" aria-hidden /> Toezichthouders
+          </h2>
+        </CardTitle>
+        <CardDescription>
+          De aparte groep toezichthouders van de club. Bij elke training moet een toezichthouder zijn: een bevoegde
+          trainer of iemand uit deze groep.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {data.toezichthouders.length === 0 ? (
+          <p className="text-muted-foreground">Nog geen toezichthouders toegevoegd.</p>
+        ) : (
+          <ul className="divide-y">
+            {data.toezichthouders.map((z) => (
+              <li key={z.id} className="flex items-center gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{z.naam}</p>
+                  {z.notitie && <p className="truncate text-sm text-muted-foreground">{z.notitie}</p>}
+                </div>
+                {magBeheren && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-11"
+                    aria-label={`${z.naam} verwijderen`}
+                    onClick={async () => {
+                      try {
+                        await verwijderToezichthouder(z.id)
+                        toast.success(`${z.naam} verwijderd`)
+                      } catch {
+                        toast.error('Verwijderen lukte niet. Probeer het opnieuw.')
+                      }
+                    }}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {magBeheren && (
+          <form onSubmit={toevoegen} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-48 flex-1 space-y-1.5">
+              <Label htmlFor="tz-naam">Naam</Label>
+              <Input id="tz-naam" value={naam} onChange={(e) => setNaam(e.target.value)} maxLength={80} />
+            </div>
+            <div className="min-w-48 flex-1 space-y-1.5">
+              <Label htmlFor="tz-notitie">Notitie (optioneel)</Label>
+              <Input
+                id="tz-notitie"
+                placeholder="Bijv. alleen op zondag"
+                value={notitie}
+                onChange={(e) => setNotitie(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <Button type="submit" disabled={bezig || !naam.trim()}>
+              Toevoegen
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function TesttrainersKaart() {
   const data = useAppData()
   const aantal = data.trainers.filter((t) => t.test).length
@@ -301,52 +504,6 @@ function TesttrainersKaart() {
   )
 }
 
-function TrainerActies({ trainer, isIk, onVerwijder }: { trainer: Trainer; isIk: boolean; onVerwijder: () => void }) {
-  async function zetRol(rol: string) {
-    if (rol === trainer.rol) return
-    try {
-      await wijzigRol(trainer.id, rol as TrainerRol)
-      toast.success(`${voornaam(trainer.naam)} is nu ${rol}`)
-    } catch {
-      toast.error('Rol wijzigen lukte niet. Probeer het opnieuw.')
-    }
-  }
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={`Acties voor ${trainer.naam}`}>
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {isIk ? (
-          <DropdownMenuItem disabled>Je kunt je eigen rol niet wijzigen.</DropdownMenuItem>
-        ) : (
-          <>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Rol wijzigen</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={trainer.rol} onValueChange={zetRol}>
-                  {ALLE_ROLLEN.map((r) => (
-                    <DropdownMenuRadioItem key={r} value={r}>
-                      {r}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onVerwijder}>
-              Verwijderen uit team
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 const uitnodigingSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email({ error: 'Vul een geldig e-mailadres in.' })),
   naam: z.string().trim().min(1, { error: 'Vul een naam in.' }).max(80),
@@ -355,13 +512,22 @@ const uitnodigingSchema = z.object({
   kleur: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 })
 
-function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+function UitnodigenDialog({
+  open,
+  onOpenChange,
+  ikBenCoordinator,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  ikBenCoordinator: boolean
+}) {
   const data = useAppData()
   const [email, setEmail] = useState('')
   const [naam, setNaam] = useState('')
   const [rol, setRol] = useState<TrainerRol>('Trainer')
   const [specialiteit, setSpecialiteit] = useState('')
   const [kleur, setKleur] = useState<string>(TRAINER_KLEUREN[1].waarde)
+  const [taken, setTaken] = useState<Taken>(GEEN_TAKEN)
   const [fouten, setFouten] = useState<Record<string, string>>({})
   const [bezig, setBezig] = useState(false)
 
@@ -370,6 +536,7 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     setNaam('')
     setRol('Trainer')
     setSpecialiteit('')
+    setTaken(GEEN_TAKEN)
     setFouten({})
   }
 
@@ -384,7 +551,7 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     }
     const u = res.data
     if (data.trainers.some((t) => t.email?.toLowerCase() === u.email)) {
-      setFouten({ email: 'Dit adres hoort al bij een trainer.' })
+      setFouten({ email: 'Dit adres hoort al bij een teamlid.' })
       return
     }
     if (data.uitnodigingen.some((x) => x.email === u.email)) {
@@ -393,7 +560,7 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     }
     setBezig(true)
     try {
-      await nodigTrainerUit(u)
+      await nodigTrainerUit({ ...u, ...taken })
       toast.success(`Uitnodiging klaargezet voor ${u.naam}`, {
         description: `${voornaam(u.naam)} kan nu inloggen op ${window.location.host} met ${u.email}.`,
       })
@@ -408,11 +575,12 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 
   const voorbeeld: Trainer = {
     id: 'voorbeeld',
-    naam: naam || 'Nieuwe trainer',
-    initialen: initialenVan(naam || 'Nieuwe trainer'),
+    naam: naam || 'Nieuw teamlid',
+    initialen: initialenVan(naam || 'Nieuw teamlid'),
     kleur,
     rol,
     specialiteit,
+    ...taken,
   }
 
   return (
@@ -425,10 +593,10 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     >
       <DialogContent className="max-h-[90svh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Trainer uitnodigen</DialogTitle>
+          <DialogTitle>Teamlid uitnodigen</DialogTitle>
           <DialogDescription>
-            Alleen dit e-mailadres kan straks inloggen. De app verstuurt zelf geen mail: laat je collega weten dat
-            hij of zij kan inloggen op {window.location.host}.
+            Alleen dit e-mailadres kan straks inloggen. De app verstuurt zelf geen mail: laat je collega weten dat hij
+            of zij kan inloggen op {window.location.host}.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={verstuur} noValidate className="space-y-4">
@@ -464,6 +632,19 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               </SelectContent>
             </Select>
           </Veld>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Taken</legend>
+            {TAKEN.filter((t) => ikBenCoordinator || !ALLEEN_COORDINATOR.includes(t)).map((taak) => (
+              <div key={taak} className="flex min-h-11 items-center gap-3">
+                <Checkbox
+                  id={`u-${taak}`}
+                  checked={taken[taak]}
+                  onCheckedChange={(v) => setTaken((x) => ({ ...x, [taak]: v === true }))}
+                />
+                <Label htmlFor={`u-${taak}`}>{TAAK_LABELS[taak]}</Label>
+              </div>
+            ))}
+          </fieldset>
           <Veld id="u-spec" label="Specialiteit (optioneel)">
             <Input
               id="u-spec"
@@ -504,7 +685,7 @@ function UitnodigenDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   )
 }
 
-function Veld({ id, label, fout, children }: { id: string; label: string; fout?: string; children: React.ReactNode }) {
+function Veld({ id, label, fout, children }: { id: string; label: string; fout?: string; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>

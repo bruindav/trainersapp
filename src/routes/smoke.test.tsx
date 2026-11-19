@@ -1,18 +1,20 @@
+// Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-1 — rooktest: elke pagina rendert met data uit de (gemockte) store
 import { act, render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import { STANDAARD_JAARPLAN, type AppData } from '@/data/fixtures'
+import { GEEN_TAKEN, STANDAARD_JAARPLAN, type AppData } from '@/data/fixtures'
 import { routeTree } from '@/routeTree.gen'
 
 const DATA: AppData = {
   huidigeTrainerId: 'a',
   trainers: [
-    { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Hoofdtrainer', specialiteit: '', email: 'anna@nat.nl' },
-    { id: 'b', naam: 'Bram Smit', initialen: 'BS', kleur: '#2f8fc0', rol: 'Trainer', specialiteit: 'Starts' },
+    { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Trainer', specialiteit: '', ...GEEN_TAKEN, coordinator: true, email: 'anna@nat.nl' },
+    { id: 'b', naam: 'Bram Smit', initialen: 'BS', kleur: '#2f8fc0', rol: 'Trainer', specialiteit: 'Starts', ...GEEN_TAKEN },
   ],
   uitnodigingen: [],
+  toezichthouders: [],
   afwezigheden: [],
   roosterWijzigingen: {},
   trainingen: [
@@ -37,7 +39,7 @@ vi.mock('@/data/auth', () => ({
   useAuthStatus: () => ({
     soort: 'ingelogd',
     user: {},
-    trainer: { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Hoofdtrainer', specialiteit: '' },
+    trainer: { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Trainer', specialiteit: '', ...GEEN_TAKEN, coordinator: true },
   }),
 }))
 

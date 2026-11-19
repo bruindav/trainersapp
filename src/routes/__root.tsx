@@ -1,3 +1,4 @@
+// Fix: fix-3 — uitnodigingen laden voor wie het team beheert
 // Fix: fix-1 — SPA-root: inloggen via Firebase en data uit Firestore
 import { Outlet, createRootRoute } from '@tanstack/react-router'
 import { useEffect } from 'react'
@@ -9,6 +10,7 @@ import { AppShell } from '@/components/app-shell'
 import { AuthSchermen, LaadScherm, SyncFoutScherm } from '@/components/auth-schermen'
 import { startAuth, useAuthStatus } from '@/data/auth'
 import { startSync, useSyncStatus } from '@/data/store'
+import { magTeamBeheren } from '@/data/fixtures'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -31,12 +33,12 @@ function RootLayout() {
 function AuthGate() {
   const auth = useAuthStatus()
   const uid = auth.soort === 'ingelogd' ? auth.trainer.id : null
-  const isHoofd = auth.soort === 'ingelogd' && auth.trainer.rol === 'Hoofdtrainer'
+  const magTeam = auth.soort === 'ingelogd' && magTeamBeheren(auth.trainer)
 
   useEffect(() => {
     if (!uid) return
-    return startSync(uid, isHoofd)
-  }, [uid, isHoofd])
+    return startSync(uid, magTeam)
+  }, [uid, magTeam])
 
   if (auth.soort !== 'ingelogd') return <AuthSchermen status={auth} />
   return <IngelogdeApp />

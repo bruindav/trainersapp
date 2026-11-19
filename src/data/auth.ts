@@ -1,4 +1,5 @@
 /**
+ * Fix: fix-3 — coördinator i.p.v. hoofdtrainer; taken bij uitnodiging; migratie oude rol.
  * Fix: fix-1 — inloggen met Firebase Auth en bepalen of iemand toegang heeft.
  *
  * Toegang = er bestaat een document `trainers/{uid}`. Dat ontstaat op twee
@@ -27,12 +28,13 @@ import {
   onSnapshot,
   serverTimestamp,
   terminate,
+  updateDoc,
   writeBatch,
 } from 'firebase/firestore'
 
 import { getDb, getFirebaseAuth, isFirebaseGeconfigureerd } from '@/lib/firebase'
 import { STANDAARD_JAARPLAN, TRAINER_KLEUREN, type Trainer, type Uitnodiging } from './fixtures'
-import { JAARPLAN_DOC, initialenVan } from './store'
+import { JAARPLAN_DOC, initialenVan, naarTrainer } from './store'
 
 export type AuthStatus =
   | { soort: 'niet-geconfigureerd' }
@@ -147,6 +149,10 @@ async function bepaalToegang(user: User, mijnGeneratie = generatie) {
         specialiteit: u.specialiteit ?? '',
         email,
         sinds: serverTimestamp(),
+        coordinator: u.coordinator === true,
+        jaarplanBeheer: u.jaarplanBeheer === true,
+        teamBeheer: u.teamBeheer === true,
+        toezichthouder: u.toezichthouder === true,
       })
       batch.delete(uitnodigingRef)
       await batch.commit()
@@ -174,19 +180,17 @@ async function bepaalToegang(user: User, mijnGeneratie = generatie) {
         return
       }
       const d = s.data()
-      zet({
-        soort: 'ingelogd',
-        user,
-        trainer: {
-          id: s.id,
-          naam: d.naam,
-          initialen: d.initialen,
-          kleur: d.kleur,
-          rol: d.rol,
-          specialiteit: d.specialiteit ?? '',
-          email: d.email,
-        },
-      })
+      // Migratie (fix-3): de oude rol 'Hoofdtrainer' wordt trainer met alle taken.
+      if (d.rol === 'Hoofdtrainer') {
+        updateDoc(trainerRef, {
+          rol: 'Trainer',
+          coordinator: true,
+          jaarplanBeheer: true,
+          teamBeheer: true,
+          toezichthouder: d.toezichthouder === true,
+        }).catch((err) => console.error('Migratie hoofdtrainer', err))
+      }
+      zet({ soort: 'ingelogd', user, trainer: naarTrainer(s.id, d) })
     },
     (err) => {
       if (!actueel()) return
@@ -260,18 +264,22 @@ export function annuleerLinkBevestigen() {
   zet({ soort: 'uitgelogd' })
 }
 
-/** Eerste inrichting: maak de ingelogde gebruiker hoofdtrainer. */
-export async function richAppIn(user: User, naam: string) {
+/** Eerste inrichting: maak de ingelogde gebruiker coördinator. */
+export async function richAppIn(user: User, naam: string, geeftZelfTraining: boolean) {
   const db = getDb()
   const batch = writeBatch(db)
   batch.set(doc(db, 'trainers', user.uid), {
     naam: naam.trim(),
     initialen: initialenVan(naam),
     kleur: TRAINER_KLEUREN[0].waarde,
-    rol: 'Hoofdtrainer',
+    rol: geeftZelfTraining ? 'Trainer' : 'Geen training',
     specialiteit: '',
     email: user.email!.toLowerCase(),
     sinds: serverTimestamp(),
+    coordinator: true,
+    jaarplanBeheer: true,
+    teamBeheer: true,
+    toezichthouder: false,
   })
   batch.set(doc(db, 'config', 'setup'), { hoofdtrainerUid: user.uid, op: serverTimestamp() })
   batch.set(doc(db, ...JAARPLAN_DOC), { ...STANDAARD_JAARPLAN, gepubliceerdDoor: user.uid })

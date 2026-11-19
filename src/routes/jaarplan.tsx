@@ -1,3 +1,4 @@
+// Fix: fix-3 — jaarplan bewerken: taak Jaarplan of coördinator
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute } from '@tanstack/react-router'
 import { CalendarCheck2, Flag, Lock, Megaphone, PartyPopper, Pencil, Printer, Trophy } from 'lucide-react'
@@ -22,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type Evenement, type Periode } from '@/data/fixtures'
+import { magJaarplanBewerken, type Evenement, type Periode } from '@/data/fixtures'
 import { huidigePeriode, publiceerJaarplan, trainerById, useAppData, werkPeriodeBij } from '@/data/store'
 import { daysBetween, formatLong, formatMonth, formatRange, formatShort, todayISO } from '@/lib/dates'
 import { cn } from '@/lib/utils'
@@ -46,7 +47,7 @@ function JaarplanPagina() {
   const plan = data.jaarplan
   const vandaag = todayISO()
   const ik = trainerById(data.huidigeTrainerId)!
-  const magBewerken = ik.rol === 'Hoofdtrainer'
+  const magBewerken = magJaarplanBewerken(ik)
   const nu = huidigePeriode(data, vandaag)
   const [bewerk, setBewerk] = useState<Periode | null>(null)
   const [publiceren, setPubliceren] = useState(false)
@@ -102,7 +103,7 @@ function JaarplanPagina() {
           )}
           {!magBewerken && (
             <p className="flex items-center gap-1.5 text-muted-foreground sm:ml-auto">
-              <Lock className="size-3.5" aria-hidden /> Alleen de hoofdtrainer past het jaarplan aan
+              <Lock className="size-3.5" aria-hidden /> Alleen de jaarplanbeheerder en de coördinator passen het jaarplan aan
             </p>
           )}
         </div>

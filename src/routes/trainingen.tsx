@@ -1,3 +1,4 @@
+// Fix: fix-3 — alleen wie training geeft is kiesbaar
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
@@ -26,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import {
+import { geeftTraining,
   ALLE_FOCUS,
   GROEPEN,
   ONDERDELEN,
@@ -193,7 +194,7 @@ function TrainingenPagina() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="alle">Alle trainers</SelectItem>
-                  {data.trainers.map((t) => (
+                  {data.trainers.filter(geeftTraining).map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.naam}
                       {t.id === data.huidigeTrainerId ? ' (jij)' : ''}
@@ -589,7 +590,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {data.trainers.map((t) => (
+              {data.trainers.filter(geeftTraining).map((t) => (
                 <SelectItem key={t.id} value={t.id}>
                   {t.naam}
                 </SelectItem>

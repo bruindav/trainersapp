@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-3 — rollen en taken, toezichthouders, migratie van 'Hoofdtrainer'.
  *
  * De vorm van de store (useAppData + selectors + acties) is gelijk gebleven
  * aan mijlpaal 1, zodat de schermen nauwelijks hoefden te veranderen. De data
@@ -24,6 +25,7 @@ import { toast } from 'sonner'
 
 import { getDb } from '@/lib/firebase'
 import {
+  GEEN_TAKEN,
   GROEPEN,
   SESSIES,
   STANDAARD_JAARPLAN,
@@ -36,6 +38,8 @@ import {
   type AppData,
   type Jaarplan,
   type Periode,
+  geeftTraining,
+  type Taken,
   type Trainer,
   type TrainerRol,
   type Training,
@@ -50,6 +54,7 @@ function leegeData(uid = ''): AppData {
     huidigeTrainerId: uid,
     trainers: [],
     uitnodigingen: [],
+    toezichthouders: [],
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],
@@ -113,16 +118,27 @@ function meldFout(actie: string) {
   }
 }
 
-function naarTrainer(id: string, d: DocumentData): Trainer {
+const ROLLEN: readonly string[] = ['Trainer', 'Assistent-trainer', 'Geen training']
+
+/**
+ * Zet een Firestore-document om naar een Trainer. Documenten van vóór fix-3
+ * met rol 'Hoofdtrainer' worden gelezen als trainer met alle taken.
+ */
+export function naarTrainer(id: string, d: DocumentData): Trainer {
+  const oudeHoofdtrainer = d.rol === 'Hoofdtrainer'
   return {
     id,
     naam: String(d.naam ?? ''),
     initialen: String(d.initialen ?? ''),
     kleur: String(d.kleur ?? '#2b2222'),
-    rol: (d.rol ?? 'Trainer') as TrainerRol,
+    rol: (ROLLEN.includes(d.rol) ? d.rol : 'Trainer') as TrainerRol,
     specialiteit: String(d.specialiteit ?? ''),
     email: d.email,
     test: d.test === true,
+    coordinator: d.coordinator === true || oudeHoofdtrainer,
+    jaarplanBeheer: d.jaarplanBeheer === true || oudeHoofdtrainer,
+    teamBeheer: d.teamBeheer === true || oudeHoofdtrainer,
+    toezichthouder: d.toezichthouder === true,
   }
 }
 
@@ -130,7 +146,7 @@ function naarTrainer(id: string, d: DocumentData): Trainer {
  * Start de live-koppeling met Firestore voor de ingelogde trainer.
  * Geeft een functie terug die alle listeners stopt.
  */
-export function startSync(uid: string, isHoofdtrainer: boolean): () => void {
+export function startSync(uid: string, magTeam: boolean): () => void {
   const db = getDb()
   state = leegeData(uid)
   syncStatus = 'laden'
@@ -224,14 +240,38 @@ export function startSync(uid: string, isHoofdtrainer: boolean): () => void {
     ),
   ]
 
-  // Uitnodigingen zijn alleen leesbaar voor de hoofdtrainer.
-  if (isHoofdtrainer) {
+  stops.push(
+    onSnapshot(
+      collection(db, 'toezichthouders'),
+      (snap) => {
+        const toezichthouders = snap.docs
+          .map((d) => ({ id: d.id, naam: String(d.data().naam ?? ''), notitie: String(d.data().notitie ?? '') }))
+          .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
+        setState((s) => ({ ...s, toezichthouders }))
+      },
+      (err) => console.error('Firestore-listener toezichthouders', err),
+    ),
+  )
+
+  // Uitnodigingen zijn alleen leesbaar voor wie het team beheert.
+  if (magTeam) {
     stops.push(
       onSnapshot(
         collection(db, 'uitnodigingen'),
         (snap) => {
           const uitnodigingen = snap.docs
-            .map((d) => ({ ...(d.data() as Uitnodiging), email: d.id }))
+            .map((d) => {
+              const x = d.data()
+              const u: Uitnodiging = {
+                ...(x as Uitnodiging),
+                email: d.id,
+                coordinator: x.coordinator === true,
+                jaarplanBeheer: x.jaarplanBeheer === true,
+                teamBeheer: x.teamBeheer === true,
+                toezichthouder: x.toezichthouder === true,
+              }
+              return u
+            })
             .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
           setState((s) => ({ ...s, uitnodigingen }))
         },
@@ -263,6 +303,7 @@ export function trainerById(id: string | null | undefined): Trainer | undefined 
       kleur: '#9a8f8f',
       rol: 'Trainer',
       specialiteit: '',
+      ...GEEN_TAKEN,
     }
   )
 }
@@ -277,7 +318,10 @@ export function groepById(id: string) {
 
 /** Trainer-id's in vaste volgorde voor de rotatie. */
 function rotatieVolgorde(data: AppData) {
-  return data.trainers.map((t) => t.id).sort()
+  return data.trainers
+    .filter(geeftTraining)
+    .map((t) => t.id)
+    .sort()
 }
 
 /** Toegewezen trainer voor een slot: handmatige wijziging, anders de rotatie. */
@@ -409,6 +453,10 @@ export async function nodigTrainerUit(u: Omit<Uitnodiging, 'uitgenodigdOp'>) {
     kleur: u.kleur,
     specialiteit: u.specialiteit.trim(),
     uitgenodigdOp: new Date().toISOString().slice(0, 10),
+    coordinator: u.coordinator,
+    jaarplanBeheer: u.jaarplanBeheer,
+    teamBeheer: u.teamBeheer,
+    toezichthouder: u.toezichthouder,
   })
 }
 
@@ -416,8 +464,17 @@ export async function trekUitnodigingIn(email: string) {
   await deleteDoc(doc(getDb(), 'uitnodigingen', email))
 }
 
-export async function wijzigRol(trainerId: string, rol: TrainerRol) {
-  await updateDoc(doc(getDb(), 'trainers', trainerId), { rol })
+/** Wijzigt rol en/of taken van een teamlid. */
+export async function wijzigTrainer(trainerId: string, wijziging: Partial<Taken> & { rol?: TrainerRol }) {
+  await updateDoc(doc(getDb(), 'trainers', trainerId), wijziging)
+}
+
+export async function voegToezichthouderToe(naam: string, notitie: string) {
+  await setDoc(doc(collection(getDb(), 'toezichthouders')), { naam: naam.trim(), notitie: notitie.trim() })
+}
+
+export async function verwijderToezichthouder(id: string) {
+  await deleteDoc(doc(getDb(), 'toezichthouders', id))
 }
 
 export async function verwijderTrainer(trainerId: string) {
@@ -441,15 +498,22 @@ export function testTrainerId(naam: string) {
 export async function voegTesttrainersToe() {
   const db = getDb()
   const batch = writeBatch(db)
+  // Een paar varianten, zodat rollen en toezicht te testen zijn.
+  const assistent = new Set(['Gert Mooi', 'Daphne Z'])
+  const toezicht = new Set(['Aalder Mellema', 'Pim Kool', 'Marlien Wijnhof', 'David Y', 'Jeroen Eskens'])
   TESTTRAINERS.forEach((naam, i) => {
     batch.set(doc(db, 'trainers', testTrainerId(naam)), {
       naam,
       initialen: initialenVan(naam),
       kleur: TRAINER_KLEUREN[(i + 1) % TRAINER_KLEUREN.length].waarde,
-      rol: 'Trainer',
+      rol: assistent.has(naam) ? 'Assistent-trainer' : 'Trainer',
       specialiteit: '',
       email: '',
       test: true,
+      coordinator: false,
+      jaarplanBeheer: false,
+      teamBeheer: false,
+      toezichthouder: toezicht.has(naam),
     })
   })
   await batch.commit()

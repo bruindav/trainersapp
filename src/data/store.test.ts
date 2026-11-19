@@ -1,18 +1,20 @@
+// Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-2 — testtrainer-id's
 // Fix: fix-1 — logica van rooster-rotatie en hulpfuncties
 import { describe, expect, it } from 'vitest'
 
-import { STANDAARD_JAARPLAN, rotatieTrainer, type AppData } from './fixtures'
+import { GEEN_TAKEN, STANDAARD_JAARPLAN, rotatieTrainer, type AppData } from './fixtures'
 import { initialenVan, roosterVoorWeek, testTrainerId, trainerById, __zetTestData } from './store'
 
 function data(over: Partial<AppData> = {}): AppData {
   return {
     huidigeTrainerId: 'a',
     trainers: [
-      { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Hoofdtrainer', specialiteit: '' },
-      { id: 'b', naam: 'Bram Smit', initialen: 'BS', kleur: '#2f8fc0', rol: 'Trainer', specialiteit: '' },
+      { id: 'a', naam: 'Anna de Boer', initialen: 'AB', kleur: '#e64439', rol: 'Trainer', specialiteit: '', ...GEEN_TAKEN, coordinator: true },
+      { id: 'b', naam: 'Bram Smit', initialen: 'BS', kleur: '#2f8fc0', rol: 'Trainer', specialiteit: '', ...GEEN_TAKEN },
     ],
     uitnodigingen: [],
+    toezichthouders: [],
     afwezigheden: [],
     roosterWijzigingen: {},
     trainingen: [],

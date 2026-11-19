@@ -1,3 +1,4 @@
+<!-- Fix: fix-3 — nieuw roosterontwerp -->
 <!-- Fix: fix-1 — Netlify vervangen door Firebase -->
 # NatUtrecht Trainersapp — roadmap
 
@@ -22,7 +23,7 @@ Een app voor de trainers van zwemvereniging Nat Utrecht om samen het trainersroo
 
 - Firebase Authentication met e-maillink en Google; geen open registratie.
 - Eerste gebruiker richt de app in als hoofdtrainer; daarna alleen via uitnodiging (scherm Team).
-- Rollen `Hoofdtrainer`, `Trainer`, `Assistent-trainer`, afgedwongen in `firestore.rules` (met tests).
+- Rollen en taken (fix-3): rol Trainer / Assistent-trainer / Geen training, taken Coördinator, Jaarplan, Teambeheer, Toezichthouder; afgedwongen in `firestore.rules` (met tests).
 - De trainerkeuze "Bekijk de app als…" is vervangen door een accountmenu met uitloggen.
 
 ## Mijlpaal 4 — Bestanden uploaden
@@ -30,12 +31,9 @@ Een app voor de trainers van zwemvereniging Nat Utrecht om samen het trainersroo
 - Geüploade trainingen (pdf, foto, Word) opslaan en downloadbaar/preview maken in het detailpaneel.
 - Let op: Cloud Storage for Firebase vereist het Blaze-abonnement (betalen naar gebruik, met gratis tegoed). Alternatieven afwegen: klein bestand als foto in Firestore (max. 1 MB per document), of een link naar Google Drive.
 
-## Mijlpaal 5 — Rooster verder uitbouwen
+## Mijlpaal 5 — Rooster met beschikbaarheid
 
-- Afwezigheid zelf melden (en intrekken) vanuit de app.
-- Ruilverzoeken: een trainer biedt een plek aan, een collega neemt hem over.
-- Standaardrotatie per seizoen instellen in plaats van de vaste rotatie in code.
-- Export naar agenda (iCal-feed per trainer).
+Zie [docs/rooster-ontwerp.md](docs/rooster-ontwerp.md): roosterperiodes, beschikbaarheid, indelen door de coördinator, vrijgeven/overnemen/ruilen en toezicht. Bouw in fix-3 t/m fix-6. Export naar agenda (iCal per trainer) volgt daarna.
 
 ## Mijlpaal 6 — Aandachtspunten en afspraken
 

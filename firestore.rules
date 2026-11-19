@@ -1,9 +1,17 @@
-// Fix: fix-1 — beveiligingsregels voor de NatUtrecht Trainersapp.
+// Fix: fix-3 — coördinator, taken (jaarplan, teambeheer, toezicht) en groep toezichthouders.
 // Fix: fix-2 — testtrainers (zonder account) toegestaan voor de hoofdtrainer.
+// Fix: fix-1 — beveiligingsregels voor de NatUtrecht Trainersapp.
 //
 // Uitgangspunt: iedereen met de (publieke) Firebase-config kan een account
 // aanmaken. Toegang tot de data hangt daarom NIET af van "ingelogd zijn",
 // maar van het bestaan van een document trainers/{uid}.
+//
+// Rechten:
+//  - coordinator == true      → alles (team, jaarplan, rooster).
+//  - teamBeheer == true       → team beheren, maar geen coördinatoren aanmaken,
+//                               wijzigen of verwijderen en geen teambeheer uitdelen.
+//  - jaarplanBeheer == true   → jaarplan bewerken.
+//  Documenten van vóór fix-3 met rol 'Hoofdtrainer' tellen als coördinator.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -22,14 +30,29 @@ service cloud.firestore {
     function isTrainer() {
       return ingelogd() && exists(trainerPad(request.auth.uid));
     }
-    function isHoofdtrainer() {
-      return isTrainer() && get(trainerPad(request.auth.uid)).data.rol == 'Hoofdtrainer';
+    function ikData() {
+      return get(trainerPad(request.auth.uid)).data;
     }
-    // Zelfde, maar na de schrijfactie (nodig binnen de inrichtings-batch).
-    function isHoofdtrainerNa() {
+    function coordinatorIn(d) {
+      return d.get('coordinator', false) == true || d.get('rol', '') == 'Hoofdtrainer';
+    }
+    function isCoordinator() {
+      return isTrainer() && coordinatorIn(ikData());
+    }
+    function magTeam() {
+      return isTrainer() && (coordinatorIn(ikData()) || ikData().get('teamBeheer', false) == true);
+    }
+    // Na de schrijfactie (nodig binnen de inrichtings-batch).
+    function isCoordinatorNa() {
       return ingelogd()
         && existsAfter(trainerPad(request.auth.uid))
-        && getAfter(trainerPad(request.auth.uid)).data.rol == 'Hoofdtrainer';
+        && coordinatorIn(getAfter(trainerPad(request.auth.uid)).data);
+    }
+    function magJaarplanNa() {
+      return ingelogd()
+        && existsAfter(trainerPad(request.auth.uid))
+        && (coordinatorIn(getAfter(trainerPad(request.auth.uid)).data)
+            || getAfter(trainerPad(request.auth.uid)).data.get('jaarplanBeheer', false) == true);
     }
     function geverifieerdEmail() {
       return ingelogd()
@@ -39,9 +62,9 @@ service cloud.firestore {
     function mijnEmail() {
       return request.auth.token.email.lower();
     }
-    // E-mailadres van de beoogde eerste hoofdtrainer. Wordt bij het deployen
+    // E-mailadres van de beoogde eerste coördinator. Wordt bij het deployen
     // ingevuld vanuit de GitHub-variabele HOOFDTRAINER_EMAIL, zodat niemand
-    // anders de app kan "inrichten" vóór de hoofdtrainer dat doet.
+    // anders de app kan "inrichten" vóór de coördinator dat doet.
     function beoogdeHoofdtrainer() {
       return '__HOOFDTRAINER_EMAIL__';
     }
@@ -49,7 +72,7 @@ service cloud.firestore {
       return /databases/$(database)/documents/uitnodigingen/$(email);
     }
     function isRol(r) {
-      return r in ['Hoofdtrainer', 'Trainer', 'Assistent-trainer'];
+      return r in ['Trainer', 'Assistent-trainer', 'Geen training'];
     }
     function isDatum(d) {
       return d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
@@ -57,33 +80,53 @@ service cloud.firestore {
     function tekst(v, max) {
       return v is string && v.size() <= max;
     }
+    function isBoolVeld(d, veld) {
+      return !(veld in d) || d[veld] is bool;
+    }
+    function takenGeldig(d) {
+      return isBoolVeld(d, 'coordinator') && isBoolVeld(d, 'jaarplanBeheer') && isBoolVeld(d, 'teamBeheer') && isBoolVeld(d, 'toezichthouder');
+    }
+    // Geeft dit document coördinator- of teambeheer-rechten?
+    function zwareTaken(d) {
+      return d.get('coordinator', false) == true || d.get('teamBeheer', false) == true;
+    }
     function geldigeTrainer(d) {
-      return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds', 'test'])
+      return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds', 'test',
+                               'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder'])
         && tekst(d.naam, 80) && d.naam.size() > 0
         && tekst(d.initialen, 3) && d.initialen.size() > 0
         && tekst(d.kleur, 9) && d.kleur.matches('^#[0-9a-fA-F]{6}$')
         && isRol(d.rol)
         && tekst(d.specialiteit, 120)
         && tekst(d.email, 254)
-        && (!('test' in d) || d.test is bool);
+        && isBoolVeld(d, 'test')
+        && takenGeldig(d);
+    }
+    // Rol en taken van een uitnodiging moeten exact worden overgenomen.
+    function zelfdeAlsUitnodiging(d, u) {
+      return d.rol == u.rol
+        && d.get('coordinator', false) == u.get('coordinator', false)
+        && d.get('jaarplanBeheer', false) == u.get('jaarplanBeheer', false)
+        && d.get('teamBeheer', false) == u.get('teamBeheer', false)
+        && d.get('toezichthouder', false) == u.get('toezichthouder', false);
     }
 
     // --- Inrichting ---------------------------------------------------------
 
     match /config/setup {
       allow read: if ingelogd();
-      // Alleen de allereerste keer, samen met het eigen hoofdtrainer-document.
+      // Alleen de allereerste keer, samen met het eigen coördinator-document.
       allow create: if geverifieerdEmail()
         && mijnEmail() == beoogdeHoofdtrainer()
         && !exists(setupPad())
         && request.resource.data.keys().hasOnly(['hoofdtrainerUid', 'op'])
         && request.resource.data.hoofdtrainerUid == request.auth.uid
         && request.resource.data.op == request.time
-        && isHoofdtrainerNa();
+        && isCoordinatorNa();
       allow update, delete: if false;
     }
 
-    // --- Trainers -----------------------------------------------------------
+    // --- Teamleden ----------------------------------------------------------
 
     match /trainers/{uid} {
       allow read: if isTrainer() || (ingelogd() && request.auth.uid == uid);
@@ -91,48 +134,74 @@ service cloud.firestore {
       allow create: if geldigeTrainer(request.resource.data)
         && (!('sinds' in request.resource.data) || request.resource.data.sinds == request.time)
         && (
-        // 1. De hoofdtrainer voegt iemand toe.
-        isHoofdtrainer()
-        // 2. Eerste inrichting: jezelf als hoofdtrainer, samen met config/setup.
+        // 1. Coördinator voegt iemand toe; teambeheer zonder zware taken.
+        isCoordinator()
+        || (magTeam() && !zwareTaken(request.resource.data))
+        // 2. Eerste inrichting: jezelf als coördinator, samen met config/setup.
         || (geverifieerdEmail()
             && mijnEmail() == beoogdeHoofdtrainer()
             && uid == request.auth.uid
             && !exists(setupPad())
             && existsAfter(setupPad())
-            && request.resource.data.rol == 'Hoofdtrainer'
+            && request.resource.data.get('coordinator', false) == true
             && request.resource.data.email == mijnEmail())
-        // 3. Een uitnodiging verzilveren: rol moet overeenkomen en de
-        //    uitnodiging wordt in dezelfde batch verwijderd.
+        // 3. Een uitnodiging verzilveren: rol en taken moeten overeenkomen en
+        //    de uitnodiging wordt in dezelfde batch verwijderd.
         || (geverifieerdEmail()
             && uid == request.auth.uid
             && exists(uitnodigingPad(mijnEmail()))
             && !existsAfter(uitnodigingPad(mijnEmail()))
-            && request.resource.data.rol == get(uitnodigingPad(mijnEmail())).data.rol
+            && zelfdeAlsUitnodiging(request.resource.data, get(uitnodigingPad(mijnEmail())).data)
             && request.resource.data.email == mijnEmail())
       );
 
-      // Alleen de hoofdtrainer wijzigt het team, en nooit zijn eigen rol:
-      // zo blijft er altijd minstens één hoofdtrainer over.
-      allow update: if isHoofdtrainer()
-        && geldigeTrainer(request.resource.data)
-        && (uid != request.auth.uid || request.resource.data.rol == resource.data.rol);
-      allow delete: if isHoofdtrainer() && uid != request.auth.uid;
+      allow update: if geldigeTrainer(request.resource.data)
+        && (
+          // Coördinator: alles, maar zichzelf de coördinatortaak niet afnemen,
+          // zodat er altijd minstens één coördinator blijft.
+          (isCoordinator()
+            && (uid != request.auth.uid || request.resource.data.get('coordinator', false) == true))
+          // Teambeheer: niet bij coördinatoren, en geen zware taken veranderen.
+          || (magTeam()
+            && !coordinatorIn(resource.data)
+            && request.resource.data.get('coordinator', false) == resource.data.get('coordinator', false)
+            && request.resource.data.get('teamBeheer', false) == resource.data.get('teamBeheer', false))
+        );
+
+      allow delete: if magTeam()
+        && uid != request.auth.uid
+        && (isCoordinator() || !coordinatorIn(resource.data));
     }
 
     // --- Uitnodigingen (id = e-mailadres in kleine letters) -----------------
 
     match /uitnodigingen/{email} {
-      allow read: if isHoofdtrainer() || (geverifieerdEmail() && email == mijnEmail());
-      allow create, update: if isHoofdtrainer()
+      allow read: if magTeam() || (geverifieerdEmail() && email == mijnEmail());
+      allow create, update: if magTeam()
+        && (isCoordinator() || !zwareTaken(request.resource.data))
         && email == email.lower()
-        && request.resource.data.keys().hasOnly(['email', 'naam', 'rol', 'kleur', 'specialiteit', 'uitgenodigdOp'])
+        && request.resource.data.keys().hasOnly(['email', 'naam', 'rol', 'kleur', 'specialiteit', 'uitgenodigdOp',
+                                                 'coordinator', 'jaarplanBeheer', 'teamBeheer', 'toezichthouder'])
         && request.resource.data.email == email
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
         && isRol(request.resource.data.rol)
         && tekst(request.resource.data.kleur, 9) && request.resource.data.kleur.matches('^#[0-9a-fA-F]{6}$')
         && tekst(request.resource.data.specialiteit, 120)
-        && isDatum(request.resource.data.uitgenodigdOp);
-      allow delete: if isHoofdtrainer() || (geverifieerdEmail() && email == mijnEmail());
+        && isDatum(request.resource.data.uitgenodigdOp)
+        && takenGeldig(request.resource.data);
+      allow delete: if (magTeam() && (isCoordinator() || !zwareTaken(resource.data)))
+        || (geverifieerdEmail() && email == mijnEmail());
+    }
+
+    // --- Groep toezichthouders (zonder account) ------------------------------
+
+    match /toezichthouders/{id} {
+      allow read: if isTrainer();
+      allow create, update: if magTeam()
+        && request.resource.data.keys().hasOnly(['naam', 'notitie'])
+        && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
+        && tekst(request.resource.data.notitie, 200);
+      allow delete: if magTeam();
     }
 
     // --- Rooster ------------------------------------------------------------
@@ -153,7 +222,7 @@ service cloud.firestore {
 
     match /afwezigheden/{id} {
       allow read: if isTrainer();
-      // Zelf melden volgt in mijlpaal 5; nu alleen eigen of door hoofdtrainer.
+      // Zelf melden volgt later; nu alleen eigen of door de coördinator.
       function geldigeAfwezigheid(d) {
         return d.keys().hasOnly(['trainerId', 'van', 'tot', 'reden'])
           && d.trainerId is string && exists(trainerPad(d.trainerId))
@@ -161,14 +230,14 @@ service cloud.firestore {
           && tekst(d.reden, 200);
       }
       allow create: if isTrainer()
-        && (request.resource.data.trainerId == request.auth.uid || isHoofdtrainer())
+        && (request.resource.data.trainerId == request.auth.uid || isCoordinator())
         && geldigeAfwezigheid(request.resource.data);
       allow update: if isTrainer()
-        && (isHoofdtrainer()
+        && (isCoordinator()
             || (resource.data.trainerId == request.auth.uid
                 && request.resource.data.trainerId == request.auth.uid))
         && geldigeAfwezigheid(request.resource.data);
-      allow delete: if isTrainer() && (resource.data.trainerId == request.auth.uid || isHoofdtrainer());
+      allow delete: if isTrainer() && (resource.data.trainerId == request.auth.uid || isCoordinator());
     }
 
     // --- Trainingen ---------------------------------------------------------
@@ -194,7 +263,7 @@ service cloud.firestore {
       allow delete: if isTrainer() && (
         resource.data.aangemaaktDoor == request.auth.uid
         || resource.data.trainerId == request.auth.uid
-        || isHoofdtrainer()
+        || isCoordinator()
       );
       allow update: if false;
     }
@@ -203,7 +272,7 @@ service cloud.firestore {
 
     match /jaarplan/{id} {
       allow read: if isTrainer();
-      allow create, update: if isHoofdtrainerNa()
+      allow create, update: if magJaarplanNa()
         && id == 'huidig'
         && request.resource.data.keys().hasOnly([
              'seizoen', 'van', 'tot', 'status', 'gepubliceerdOp', 'gepubliceerdDoor',

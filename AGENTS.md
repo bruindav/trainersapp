@@ -1,3 +1,4 @@
+<!-- Fix: fix-3 — rollen en taken; nieuw roosterontwerp -->
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
@@ -58,9 +59,9 @@ This document describes the project for developers and AI agents working on this
 │   │   ├── __root.tsx        # Auth gate + AppShell around <Outlet/> (HTML shell is index.html)
 │   │   ├── index.tsx         # Overzicht / dashboard
 │   │   ├── rooster.tsx       # Weekly roster grid, assign dialog, 4-week distribution (?week=YYYY-MM-DD)
-│   │   ├── jaarplan.tsx      # Season timeline, periods (edit = hoofdtrainer only), publish dialog
+│   │   ├── jaarplan.tsx      # Season timeline, periods (edit = coordinator or jaarplanBeheer), publish dialog
 │   │   ├── trainingen.tsx    # Training log, filters, detail Sheet (?id=), new/upload dialog (?nieuw=true)
-│   │   └── team.tsx          # Team list; hoofdtrainer invites, changes roles, removes trainers
+│   │   └── team.tsx          # Team: roles + tasks, invites, supervisors group, test trainers
 │   └── styles.css            # Theme variables (Nat Utrecht palette), .nat-rainbow, .nat-wave, print CSS
 ```
 
@@ -70,13 +71,14 @@ This document describes the project for developers and AI agents working on this
 
 | Path | Contents | Who may write |
 | ---- | -------- | ------------- |
-| `trainers/{uid}` | naam, initialen, kleur, rol, specialiteit, email | hoofdtrainer; self only via setup or invite |
-| `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp | hoofdtrainer (invitee may delete own on redeem) |
-| `config/setup` | hoofdtrainerUid — exists once the app is set up | first user, once |
+| `trainers/{uid}` | naam, initialen, kleur, rol (`Trainer`/`Assistent-trainer`/`Geen training`), specialiteit, email, taken `coordinator`/`jaarplanBeheer`/`teamBeheer`/`toezichthouder` (bool), `test` | coordinator; teamBeheer (not for coordinators / heavy tasks); self only via setup or invite |
+| `uitnodigingen/{email}` | email, naam, rol, kleur, specialiteit, uitgenodigdOp + the four task flags | coordinator / teamBeheer (invitee may delete own on redeem) |
+| `toezichthouders/{id}` | naam, notitie — the club's separate group of supervisors (no accounts yet) | coordinator / teamBeheer |
+| `config/setup` | hoofdtrainerUid (= first coordinator) — exists once the app is set up | first user, once |
 | `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
-| `afwezigheden/{id}` | trainerId, van, tot, reden | own or hoofdtrainer |
-| `trainingen/{id}` | training + aangemaaktDoor | any trainer (as self); delete own or hoofdtrainer |
-| `jaarplan/huidig` | the whole Jaarplan object | hoofdtrainer |
+| `afwezigheden/{id}` | trainerId, van, tot, reden | own or coordinator |
+| `trainingen/{id}` | training + aangemaaktDoor | any trainer (as self); delete own or coordinator |
+| `jaarplan/huidig` | the whole Jaarplan object | coordinator or jaarplanBeheer |
 
 ## Key Concepts
 
@@ -162,7 +164,10 @@ pnpm preview       # Preview the production build
 - **Roster model**: each slot = week × sessie × groep. A deterministic rotation (`rotatieTrainer`) proposes a trainer for every week; manual changes are stored as overrides keyed `weekStart|sessieId|groepId` (`null` = open slot). Keep this "rotation + overrides" model when moving to the database.
 - **Roster rotation** runs over all trainers sorted by uid; adding or removing a trainer changes future proposals (manual overrides stay). A configurable rotation is milestone 5.
 - **Jaarplan**: on first-time setup `STANDAARD_JAARPLAN` (season 2026–2027, goal EuroGames Cardiff 14–17 Jul 2027) is written to `jaarplan/huidig`; competition dates other than EuroGames are "onder voorbehoud".
-- **Logged-in trainer** = Firebase uid (`huidigeTrainerId`). Only role `Hoofdtrainer` may edit/publish the jaarplan and manage the team; a hoofdtrainer can't change their own role or remove themselves, so one always remains.
+- **Logged-in trainer** = Firebase uid (`huidigeTrainerId`).
+- **Rol vs. taken** (fix-3): `rol` says whether someone gives training (`Geen training` = e.g. a coordinator who doesn't coach; excluded from roster and training pickers). Tasks are separate flags: `coordinator` (schedules; may do everything), `jaarplanBeheer` (edits/publishes the jaarplan), `teamBeheer` (delegated by the coordinator: invite and edit members, but never coordinators or the heavy tasks `coordinator`/`teamBeheer`), `toezichthouder` (pool-supervisor qualification). A coordinator can't remove their own coordinator flag or delete themselves, so one always remains. Legacy docs with `rol: 'Hoofdtrainer'` count as coordinator and are migrated on that user's next login.
+- **Toezicht**: every training needs a supervisor — a qualified trainer or someone from `toezichthouders`, also when swimmers train without a trainer.
+- **New roster design** (to be built in fix-4…6): see `docs/rooster-ontwerp.md`.
 - **Login** uses email links and Google because both prove ownership of the address (`email_verified`); invites are matched on that verified address.
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.

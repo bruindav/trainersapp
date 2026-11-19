@@ -1,3 +1,4 @@
+// Fix: fix-3 — eerste inrichting door de coördinator
 // Fix: fix-1 — schermen rond inloggen (ontwerp: UI-agent)
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Loader2, Mail, RefreshCw, ShieldX } from 'lucide-react'
@@ -7,6 +8,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -187,7 +189,7 @@ function Inloggen() {
           <GoogleLogo /> Inloggen met Google
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          Nog geen toegang? Vraag de hoofdtrainer om een uitnodiging.
+          Nog geen toegang? Vraag de coördinator om een uitnodiging.
         </p>
       </CardContent>
     </AuthLayout>
@@ -284,6 +286,7 @@ function LinkBevestigen() {
 
 function EersteKeerInstellen({ email, naam: googleNaam, user }: { email: string; naam: string; user: Parameters<typeof richAppIn>[0] }) {
   const [naam, setNaam] = useState(googleNaam)
+  const [geeftTraining, setGeeftTraining] = useState(true)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState('')
 
@@ -296,11 +299,11 @@ function EersteKeerInstellen({ email, naam: googleNaam, user }: { email: string;
     setBezig(true)
     setFout('')
     try {
-      await richAppIn(user, naam)
+      await richAppIn(user, naam, geeftTraining)
       toast.success('App ingericht', { description: 'Nodig nu je trainers uit via Team.' })
     } catch (err) {
       console.error('Inrichten', err)
-      setFout('Inrichten lukte niet. Alleen de beoogde hoofdtrainer kan de app inrichten; vraag anders de hoofdtrainer om een uitnodiging.')
+      setFout('Inrichten lukte niet. Alleen de beoogde coördinator kan de app inrichten; vraag anders de coördinator om een uitnodiging.')
       setBezig(false)
     }
   }
@@ -313,7 +316,7 @@ function EersteKeerInstellen({ email, naam: googleNaam, user }: { email: string;
           <h1 className="text-xl font-bold">De app is nog niet ingericht</h1>
         </CardTitle>
         <CardDescription>
-          Er is nog geen hoofdtrainer. Ben jij dat? Dan richt je de app nu in en nodig je daarna je collega's uit.
+          Er is nog geen coördinator. Ben jij dat? Dan richt je de app nu in en nodig je daarna je collega's uit.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -327,6 +330,10 @@ function EersteKeerInstellen({ email, naam: googleNaam, user }: { email: string;
             <Label htmlFor="setup-naam">Je naam</Label>
             <Input id="setup-naam" autoComplete="name" value={naam} onChange={(e) => setNaam(e.target.value)} className="h-11" />
           </div>
+          <div className="flex min-h-11 items-center gap-3">
+            <Checkbox id="setup-traint" checked={geeftTraining} onCheckedChange={(v) => setGeeftTraining(v === true)} />
+            <Label htmlFor="setup-traint">Ik geef zelf ook training</Label>
+          </div>
           <p className="text-sm text-muted-foreground">
             Je logt in als <strong className="text-foreground">{email}</strong>
           </p>
@@ -336,7 +343,7 @@ function EersteKeerInstellen({ email, naam: googleNaam, user }: { email: string;
                 <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> App inrichten…
               </>
             ) : (
-              'Ik ben de hoofdtrainer, richt de app in'
+              'Ik ben de coördinator, richt de app in'
             )}
           </Button>
         </form>
@@ -360,7 +367,7 @@ function GeenToegang({ email }: { email: string }) {
         </CardTitle>
         <CardDescription>
           Je bent ingelogd als <strong className="text-foreground">{email}</strong>, maar dit adres heeft geen
-          uitnodiging voor de Trainersapp. Vraag de hoofdtrainer om je uit te nodigen, of log in met een ander adres.
+          uitnodiging voor de Trainersapp. Vraag de coördinator om je uit te nodigen, of log in met een ander adres.
         </CardDescription>
       </CardHeader>
       <CardContent>
