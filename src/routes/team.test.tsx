@@ -1,3 +1,4 @@
+// Fix: fix-2 — testtrainers
 // Fix: fix-1 — Team-pagina: rechten per rol
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -35,6 +36,7 @@ describe('Team', () => {
     expect(screen.getAllByRole('button', { name: /Trainer uitnodigen/ }).length).toBeGreaterThan(0)
     expect(screen.getByText('cor@nat.nl', { exact: false })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Acties voor Bram Smit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Testtrainers toevoegen/ })).toBeInTheDocument()
   })
 
   it('gewone trainer ziet alleen de lijst', () => {
@@ -44,5 +46,6 @@ describe('Team', () => {
     expect(screen.queryByRole('button', { name: /Trainer uitnodigen/ })).not.toBeInTheDocument()
     expect(screen.queryByText('cor@nat.nl', { exact: false })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Acties voor/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Testtrainers/ })).not.toBeInTheDocument()
   })
 })

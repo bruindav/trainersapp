@@ -1,6 +1,7 @@
+// Fix: fix-2 — testtrainers toevoegen en verwijderen
 // Fix: fix-1 — Team: trainers bekijken; hoofdtrainer nodigt uit en beheert rollen
 import { createFileRoute } from '@tanstack/react-router'
-import { Mail, MoreHorizontal, UserPlus } from 'lucide-react'
+import { FlaskConical, Mail, MoreHorizontal, UserPlus } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -38,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ALLE_ROLLEN,
   TRAINER_KLEUREN,
+  TESTTRAINERS,
   type Trainer,
   type TrainerRol,
   type Uitnodiging,
@@ -48,7 +50,9 @@ import {
   trainerById,
   trekUitnodigingIn,
   useAppData,
+  verwijderTesttrainers,
   verwijderTrainer,
+  voegTesttrainersToe,
   wijzigRol,
 } from '@/data/store'
 import { formatShort } from '@/lib/dates'
@@ -117,6 +121,7 @@ function TeamPagina() {
                       {t.naam}
                       {t.id === ik.id && <span className="text-sm font-normal text-muted-foreground">(jij)</span>}
                       <RolBadge rol={t.rol} />
+                      {t.test && <Badge variant="secondary">Test</Badge>}
                     </p>
                     {t.specialiteit && <p className="truncate text-sm text-muted-foreground">{t.specialiteit}</p>}
                   </div>
@@ -136,6 +141,8 @@ function TeamPagina() {
             )}
           </CardContent>
         </Card>
+
+        {isHoofd && <TesttrainersKaart />}
 
         {isHoofd && (
           <Card>
@@ -235,6 +242,62 @@ function TeamPagina() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function TesttrainersKaart() {
+  const data = useAppData()
+  const aantal = data.trainers.filter((t) => t.test).length
+  const [bezig, setBezig] = useState(false)
+
+  async function uitvoeren(actie: () => Promise<void>, gelukt: string) {
+    setBezig(true)
+    try {
+      await actie()
+      toast.success(gelukt)
+    } catch {
+      toast.error('Dat lukte niet. Probeer het opnieuw.')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <FlaskConical className="size-5 text-primary" aria-hidden /> Testtrainers
+          </h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Om de app uit te proberen: {TESTTRAINERS.length} testtrainers zonder account. Ze verschijnen in het team, het
+          rooster en bij trainingen, maar kunnen niet inloggen.
+        </p>
+        {aantal === 0 ? (
+          <Button
+            variant="outline"
+            disabled={bezig}
+            onClick={() => uitvoeren(voegTesttrainersToe, `${TESTTRAINERS.length} testtrainers toegevoegd`)}
+          >
+            <FlaskConical aria-hidden /> Testtrainers toevoegen
+          </Button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm">{aantal} testtrainers in het team</span>
+            <Button
+              variant="outline"
+              disabled={bezig}
+              onClick={() => uitvoeren(verwijderTesttrainers, 'Testtrainers verwijderd')}
+            >
+              Alle testtrainers verwijderen
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

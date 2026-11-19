@@ -1,8 +1,9 @@
+// Fix: fix-2 — testtrainer-id's
 // Fix: fix-1 — logica van rooster-rotatie en hulpfuncties
 import { describe, expect, it } from 'vitest'
 
 import { STANDAARD_JAARPLAN, rotatieTrainer, type AppData } from './fixtures'
-import { initialenVan, roosterVoorWeek, trainerById, __zetTestData } from './store'
+import { initialenVan, roosterVoorWeek, testTrainerId, trainerById, __zetTestData } from './store'
 
 function data(over: Partial<AppData> = {}): AppData {
   return {
@@ -39,6 +40,10 @@ describe('rotatie', () => {
 })
 
 describe('hulpfuncties', () => {
+  it('maakt testtrainer-id\'s', () => {
+    expect(testTrainerId('Aalder Mellema')).toBe('test-aalder-mellema')
+    expect(testTrainerId('Viola X')).toBe('test-viola-x')
+  })
   it('maakt initialen', () => {
     expect(initialenVan('Sanne de Wit')).toBe('SW')
     expect(initialenVan('Mo')).toBe('MO')

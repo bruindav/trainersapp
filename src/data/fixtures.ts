@@ -1,3 +1,4 @@
+// Fix: fix-2 — testtrainers
 // Fix: fix-1 — voorbeelddata vervangen door Firestore; dit bestand bevat nu
 // de domeintypes, de vaste clubgegevens (sessies, groepen) en het
 // standaard-jaarplan waarmee de app bij de eerste inrichting start.
@@ -17,7 +18,22 @@ export interface Trainer {
   rol: TrainerRol
   specialiteit: string
   email?: string
+  /** Testtrainer zonder account (alleen om de app uit te proberen). */
+  test?: boolean
 }
+
+/** Testtrainers die de hoofdtrainer met één knop kan toevoegen en verwijderen. */
+export const TESTTRAINERS = [
+  'Aalder Mellema',
+  'Elke Rovers',
+  'Pim Kool',
+  'Marlien Wijnhof',
+  'Gert Mooi',
+  'Viola X',
+  'David Y',
+  'Jeroen Eskens',
+  'Daphne Z',
+] as const
 
 export const ALLE_ROLLEN: TrainerRol[] = ['Hoofdtrainer', 'Trainer', 'Assistent-trainer']
 

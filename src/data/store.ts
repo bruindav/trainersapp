@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-2 — testtrainers toevoegen/verwijderen.
  *
  * De vorm van de store (useAppData + selectors + acties) is gelijk gebleven
  * aan mijlpaal 1, zodat de schermen nauwelijks hoefden te veranderen. De data
@@ -26,6 +27,8 @@ import {
   GROEPEN,
   SESSIES,
   STANDAARD_JAARPLAN,
+  TESTTRAINERS,
+  TRAINER_KLEUREN,
   rotatieTrainer,
   sessieDatum,
   slotKey,
@@ -119,6 +122,7 @@ function naarTrainer(id: string, d: DocumentData): Trainer {
     rol: (d.rol ?? 'Trainer') as TrainerRol,
     specialiteit: String(d.specialiteit ?? ''),
     email: d.email,
+    test: d.test === true,
   }
 }
 
@@ -418,4 +422,43 @@ export async function wijzigRol(trainerId: string, rol: TrainerRol) {
 
 export async function verwijderTrainer(trainerId: string) {
   await deleteDoc(doc(getDb(), 'trainers', trainerId))
+}
+
+/** Id voor een testtrainer, bijv. "test-aalder-mellema". */
+export function testTrainerId(naam: string) {
+  return (
+    'test-' +
+    naam
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  )
+}
+
+/** Voegt de testtrainers toe (zonder account; ze kunnen niet inloggen). */
+export async function voegTesttrainersToe() {
+  const db = getDb()
+  const batch = writeBatch(db)
+  TESTTRAINERS.forEach((naam, i) => {
+    batch.set(doc(db, 'trainers', testTrainerId(naam)), {
+      naam,
+      initialen: initialenVan(naam),
+      kleur: TRAINER_KLEUREN[(i + 1) % TRAINER_KLEUREN.length].waarde,
+      rol: 'Trainer',
+      specialiteit: '',
+      email: '',
+      test: true,
+    })
+  })
+  await batch.commit()
+}
+
+/** Verwijdert alle testtrainers weer. */
+export async function verwijderTesttrainers() {
+  const db = getDb()
+  const batch = writeBatch(db)
+  state.trainers.filter((t) => t.test).forEach((t) => batch.delete(doc(db, 'trainers', t.id)))
+  await batch.commit()
 }

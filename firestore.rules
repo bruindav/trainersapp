@@ -1,4 +1,5 @@
 // Fix: fix-1 — beveiligingsregels voor de NatUtrecht Trainersapp.
+// Fix: fix-2 — testtrainers (zonder account) toegestaan voor de hoofdtrainer.
 //
 // Uitgangspunt: iedereen met de (publieke) Firebase-config kan een account
 // aanmaken. Toegang tot de data hangt daarom NIET af van "ingelogd zijn",
@@ -57,13 +58,14 @@ service cloud.firestore {
       return v is string && v.size() <= max;
     }
     function geldigeTrainer(d) {
-      return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds'])
+      return d.keys().hasOnly(['naam', 'initialen', 'kleur', 'rol', 'specialiteit', 'email', 'sinds', 'test'])
         && tekst(d.naam, 80) && d.naam.size() > 0
         && tekst(d.initialen, 3) && d.initialen.size() > 0
         && tekst(d.kleur, 9) && d.kleur.matches('^#[0-9a-fA-F]{6}$')
         && isRol(d.rol)
         && tekst(d.specialiteit, 120)
-        && tekst(d.email, 254);
+        && tekst(d.email, 254)
+        && (!('test' in d) || d.test is bool);
     }
 
     // --- Inrichting ---------------------------------------------------------

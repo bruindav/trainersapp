@@ -1,3 +1,4 @@
+// Fix: fix-2 — testtrainers
 // Fix: fix-1 — tests voor firestore.rules (pnpm test:rules)
 import { readFileSync } from 'node:fs'
 import {
@@ -167,6 +168,13 @@ describe('team beheren', () => {
   it('hoofdtrainer kan de eigen rol niet wijzigen of zichzelf verwijderen', async () => {
     await assertFails(updateDoc(doc(als(HOOFD), 'trainers', HOOFD.uid), { rol: 'Trainer' }))
     await assertFails(deleteDoc(doc(als(HOOFD), 'trainers', HOOFD.uid)))
+  })
+  it('alleen de hoofdtrainer kan testtrainers (zonder account) toevoegen', async () => {
+    const test = { ...trainerDoc('Aalder Mellema', 'Trainer', ''), test: true }
+    await assertFails(setDoc(doc(als(TRAINER), 'trainers', 'test-aalder-mellema'), test))
+    await assertSucceeds(setDoc(doc(als(HOOFD), 'trainers', 'test-aalder-mellema'), test))
+    await assertFails(setDoc(doc(als(HOOFD), 'trainers', 'test-x'), { ...test, test: 'ja' }))
+    await assertSucceeds(deleteDoc(doc(als(HOOFD), 'trainers', 'test-aalder-mellema')))
   })
   it('hoofdtrainer kan een trainer verwijderen', async () => {
     await assertSucceeds(deleteDoc(doc(als(HOOFD), 'trainers', TRAINER.uid)))
