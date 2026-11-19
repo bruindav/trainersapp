@@ -1,3 +1,4 @@
+// Fix: fix-10 — indeling en publicatie op roosterperiodes.
 // Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Fix: fix-3 — coördinator, taken (jaarplan, teambeheer, toezicht) en groep toezichthouders.
 // Fix: fix-2 — testtrainers (zonder account) toegestaan voor de hoofdtrainer.
@@ -234,7 +235,9 @@ service cloud.firestore {
       allow create, update: if isCoordinator()
         && request.resource.data.keys().hasOnly([
              'naam', 'soort', 'van', 'tot', 'status', 'deadline', 'momentIds', 'losseTrainingen',
-             'vervallenData', 'versie', 'aangemaaktOp'])
+             'vervallenData', 'versie', 'aangemaaktOp', 'indeling', 'gepubliceerdOp', 'gepubliceerdDoor'])
+        && (!('indeling' in request.resource.data)
+            || (request.resource.data.indeling is map && request.resource.data.indeling.size() <= 500))
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
         && request.resource.data.soort in ['wekelijks', 'los']
         && isDatum(request.resource.data.van) && isDatum(request.resource.data.tot)

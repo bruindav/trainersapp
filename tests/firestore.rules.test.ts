@@ -1,3 +1,4 @@
+// Fix: fix-10 — indeling
 // Fix: fix-5 — momenten, periodes, beschikbaarheid
 // Fix: fix-3 — coördinator, taken, toezichthouders, migratie oude hoofdtrainer
 // Fix: fix-2 — testtrainers
@@ -342,6 +343,14 @@ describe('roosterperiodes en beschikbaarheid', () => {
     await assertFails(setDoc(doc(als(TRAINER), 'roosterperiodes', 'p2'), periode('concept')))
     await assertFails(setDoc(doc(als(HOOFD), 'roosterperiodes', 'p3'), { ...periode('concept'), status: 'klaar' }))
     await assertSucceeds(getDoc(doc(als(TRAINER), 'roosterperiodes', 'p1')))
+  })
+  it('alleen de coördinator deelt in en publiceert', async () => {
+    await seed(async (db) => setDoc(doc(db, 'roosterperiodes', 'p'), periode('indelen')))
+    const indeling = { indeling: { '2027-01-05|m1': { trainers: [TRAINER.uid] } } }
+    await assertSucceeds(updateDoc(doc(als(HOOFD), 'roosterperiodes', 'p'), indeling))
+    await assertFails(updateDoc(doc(als(TRAINER), 'roosterperiodes', 'p'), indeling))
+    await assertFails(updateDoc(doc(als(HOOFD), 'roosterperiodes', 'p'), { indeling: 'kapot' }))
+    await assertSucceeds(updateDoc(doc(als(HOOFD), 'roosterperiodes', 'p'), { status: 'gepubliceerd', versie: 1 }))
   })
   it('trainer vult alleen de eigen beschikbaarheid in, en alleen in de juiste fase', async () => {
     await seed(async (db) => {

@@ -28,6 +28,8 @@ const periode: Roosterperiode = {
   momentIds: ['m1', 'm2', 'm3', 'm4'],
   losseTrainingen: [],
   vervallenData: ['2027-01-07'],
+  indeling: {},
+  versie: 0,
 }
 
 describe('trainingenInPeriode', () => {

@@ -1,3 +1,4 @@
+// Fix: fix-10 — naar indelen / rooster
 // Fix: fix-9 — inklapbare blokken
 // Fix: fix-8 — knop: testbeschikbaarheid voor testtrainers
 // Fix: fix-7 — beschikbaarheid via eigen pagina; feestdagen signaleren
@@ -111,6 +112,13 @@ function PeriodePagina() {
               {periode.status === 'afgesloten' && 'Deze periode is afgelopen.'}
             </p>
             {ik.coordinator && <StatusActies periode={periode} aantalTrainingen={trainingen.length} />}
+            {!ik.coordinator && (periode.status === 'gepubliceerd' || periode.status === 'afgesloten') && (
+              <Button asChild>
+                <Link to="/periodes/$periodeId/indelen" params={{ periodeId: periode.id }}>
+                  Rooster bekijken
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -284,11 +292,25 @@ function StatusActies({ periode, aantalTrainingen }: { periode: Roosterperiode; 
       )}
       {periode.status === 'indelen' && (
         <>
-          <Alert className="w-full">
-            <AlertDescription>Het indelen zelf komt in de volgende versie van de app.</AlertDescription>
-          </Alert>
+          <Button asChild>
+            <Link to="/periodes/$periodeId/indelen" params={{ periodeId: periode.id }}>
+              Naar indelen
+            </Link>
+          </Button>
           <Button variant="outline" disabled={bezig} onClick={() => zet('beschikbaarheid', 'Beschikbaarheid weer geopend')}>
             Beschikbaarheid heropenen
+          </Button>
+        </>
+      )}
+      {periode.status === 'gepubliceerd' && (
+        <>
+          <Button asChild>
+            <Link to="/periodes/$periodeId/indelen" params={{ periodeId: periode.id }}>
+              Rooster bekijken en wijzigen
+            </Link>
+          </Button>
+          <Button variant="outline" disabled={bezig} onClick={() => zet('indelen', 'Terug naar indelen; het rooster is niet meer gepubliceerd')}>
+            Publicatie intrekken
           </Button>
         </>
       )}

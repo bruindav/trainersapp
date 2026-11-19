@@ -1,6 +1,7 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
+ * Fix: fix-10 — indeling opslaan en publiceren.
  * Fix: fix-8 — testbeschikbaarheid voor testtrainers.
  * Fix: fix-5 — trainingsmomenten, roosterperiodes en beschikbaarheid.
  * Fix: fix-3 — rollen en taken, toezichthouders, migratie van 'Hoofdtrainer'.
@@ -22,6 +23,7 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  FieldPath,
   type DocumentData,
 } from 'firebase/firestore'
 import { toast } from 'sonner'
@@ -58,6 +60,7 @@ import {
   type Roosterperiode,
   type Trainingsmoment,
 } from './rooster'
+import type { Indeling, IndelingMap } from './indeling'
 
 /** Pad van het (ene) jaarplan-document. */
 export const JAARPLAN_DOC = ['jaarplan', 'huidig'] as const
@@ -297,6 +300,8 @@ export function startSync(uid: string, magTeam: boolean): () => void {
               momentIds: Array.isArray(x.momentIds) ? x.momentIds : [],
               losseTrainingen: Array.isArray(x.losseTrainingen) ? x.losseTrainingen : [],
               vervallenData: Array.isArray(x.vervallenData) ? x.vervallenData : [],
+              indeling: x.indeling && typeof x.indeling === 'object' ? x.indeling : {},
+              versie: Number(x.versie ?? 0),
             }
             return p
           })
@@ -738,4 +743,30 @@ export async function wisTestbeschikbaarheid(periodeId: string) {
     .filter((t) => t.test)
     .forEach((t) => batch.delete(doc(db, 'roosterperiodes', periodeId, 'beschikbaarheid', t.id)))
   await batch.commit()
+}
+
+// ---------------------------------------------------------------------------
+// Fix: fix-10 — indelen
+// ---------------------------------------------------------------------------
+
+/** Wijzigt de indeling van één training. */
+export async function zetIndeling(periodeId: string, key: string, indeling: Indeling) {
+  const schoon: Indeling = { trainers: indeling.trainers }
+  if (indeling.nodig !== undefined) schoon.nodig = indeling.nodig
+  if (indeling.toezicht) schoon.toezicht = indeling.toezicht
+  await updateDoc(doc(getDb(), 'roosterperiodes', periodeId), new FieldPath('indeling', key), schoon)
+}
+
+/** Vervangt de hele indeling (bijv. na "Voorstel maken"). */
+export async function zetHeleIndeling(periodeId: string, indeling: IndelingMap) {
+  await updateDoc(doc(getDb(), 'roosterperiodes', periodeId), { indeling })
+}
+
+export async function publiceerRooster(periode: Roosterperiode) {
+  await updateDoc(doc(getDb(), 'roosterperiodes', periode.id), {
+    status: 'gepubliceerd',
+    versie: periode.versie + 1,
+    gepubliceerdOp: serverTimestamp(),
+    gepubliceerdDoor: state.huidigeTrainerId,
+  })
 }

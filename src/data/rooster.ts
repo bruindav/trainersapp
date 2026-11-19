@@ -1,8 +1,10 @@
+// Fix: fix-10 — indeling en publicatie op de periode
 // Fix: fix-7 — feestdagen markeren bij trainingen
 // Fix: fix-5 — domein van het nieuwe rooster: trainingsmomenten, roosterperiodes en beschikbaarheid.
 // Zie docs/rooster-ontwerp.md voor de besluiten.
 import { addDays, parseISODate } from '@/lib/dates'
 import { feestdag } from '@/lib/feestdagen'
+import type { IndelingMap } from './indeling'
 import type { Jaarplan } from './fixtures'
 
 /** 0 = maandag … 6 = zondag */
@@ -75,6 +77,10 @@ export interface Roosterperiode {
   losseTrainingen: LosseTraining[]
   /** Data waarop niet getraind wordt (naast het reces uit het jaarplan). */
   vervallenData: string[]
+  /** Indeling per training (sleutel = PeriodeTraining.key). */
+  indeling: IndelingMap
+  /** Telt op bij elke publicatie. */
+  versie: number
 }
 
 export type Keuze = 'graag' | 'kan' | 'nee'
