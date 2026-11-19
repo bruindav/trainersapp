@@ -1,3 +1,4 @@
+// Fix: fix-24 — help: bewerken aanzetten
 // Fix: fix-23 — help: blokken inklappen
 // Fix: fix-21 — help over trainingsopbouw en wedstrijden
 // Fix: fix-20 — helppagina
@@ -132,7 +133,7 @@ function HelpPagina() {
         </p>
         <ul>
           <li>
-            Het jaarplan wordt ingevuld door de trainer met de taak Jaarplan (of de coördinator). Elk blok heeft een potlood;
+            Het jaarplan wordt ingevuld door de trainer met de taak Jaarplan (of de coördinator). Zet eerst "Jaarplan bewerken" aan; dan krijgt elk blok een potlood en prullenbak;
             teksten mogen opsommingen, inspringen, vet en kleur hebben, en plakken uit Word houdt die opmaak vast.
           </li>
           <li>

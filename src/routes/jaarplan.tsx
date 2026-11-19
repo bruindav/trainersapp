@@ -1,3 +1,4 @@
+// Fix: fix-24 — bewerken pas na 'Jaarplan bewerken'; verwijderknoppen bij fases en aandachtsgebieden; 'Nu' inklapbaar
 // Fix: fix-23 — blokken inklapbaar (onthouden per apparaat); seizoensoverzicht verborgen
 // Fix: fix-21 — jaarplan als trainingsopbouw: tijdlijn, inleiding, aandachtsgebieden, zones en fases in blokken
 import { createFileRoute, Link } from '@tanstack/react-router'
@@ -129,7 +130,10 @@ function JaarplanPagina() {
   const data = useAppData()
   const plan = data.jaarplan
   const ik = trainerById(data.huidigeTrainerId)
-  const magBewerken = magJaarplanBewerken(ik)
+  const magJaarplan = magJaarplanBewerken(ik)
+  // Bewerken staat standaard uit, zodat een klaar jaarplan niet per ongeluk verandert.
+  const [bewerkModus, setBewerkModus] = useState(false)
+  const magBewerken = magJaarplan && bewerkModus
   const vandaag = todayISO()
   const opbouwen = opbouwenOpVolgorde(plan)
   const [gekozen, setGekozen] = useState<string | null>(null)
@@ -170,7 +174,17 @@ function JaarplanPagina() {
             >
               <Printer /> Afdrukken
             </Button>
-            {magBewerken && (
+            {magJaarplan && (
+              <Button
+                variant={bewerkModus ? 'default' : 'secondary'}
+                aria-pressed={bewerkModus}
+                onClick={() => setBewerkModus((b) => !b)}
+              >
+                <Pencil />{' '}
+                {bewerkModus ? 'Klaar met bewerken' : 'Jaarplan bewerken'}
+              </Button>
+            )}
+            {magJaarplan && (
               <Button
                 onClick={() => setPubliceren(true)}
                 disabled={plan.status === 'gepubliceerd'}
@@ -183,6 +197,24 @@ function JaarplanPagina() {
         }
       />
 
+      {bewerkModus && (
+        <div className="sticky top-16 z-20 border-b bg-nat-yellow/90 backdrop-blur print:hidden">
+          <div className="mx-auto flex max-w-content flex-wrap items-center gap-3 px-4 py-2 text-sm sm:px-6">
+            <Pencil className="size-4" aria-hidden />
+            <span className="flex-1">
+              <strong>Bewerken staat aan.</strong> Elk blok heeft nu een potlood
+              en prullenbak. Wijzigingen zetten het jaarplan op concept.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBewerkModus(false)}
+            >
+              Klaar
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-content space-y-6 px-4 py-6 sm:px-6">
         <Tijdlijn
           plan={plan}
@@ -245,7 +277,7 @@ function JaarplanPagina() {
             onFase={(f) => setFaseOpen({ opbouw, fase: f })}
           />
         ) : (
-          <LegeOpbouw magBewerken={magBewerken} />
+          <LegeOpbouw magBewerken={magBewerken} magJaarplan={magJaarplan} />
         )}
 
         <ZonesBlok zones={plan.zones} magBewerken={magBewerken} />
@@ -511,6 +543,8 @@ function NuKaart({
   vandaag: string
   onFase: (o: Opbouw, f: Fase) => void
 }) {
+  const [open, wissel] = useInklap('nu')
+  const inhoudId = useId()
   const nu = faseOp(plan, vandaag)
   const volgende = volgendeWedstrijd(wedstrijden, vandaag)
   if (!nu) {
@@ -528,33 +562,62 @@ function NuKaart({
   return (
     <section
       aria-labelledby="nu-kop"
-      className="grid gap-5 rounded-2xl border-2 bg-card p-4 sm:p-5 md:grid-cols-2"
+      className={cn(
+        'relative grid gap-5 rounded-2xl border-2 bg-card p-4 sm:p-5',
+        open && 'md:grid-cols-2',
+      )}
       style={{ borderColor: nu.fase.kleur }}
     >
-      <div className="space-y-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={inhoudId}
+        aria-label={open ? 'Nu inklappen' : 'Nu uitklappen'}
+        onClick={wissel}
+        className="absolute top-2 right-2 flex size-11 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 print:hidden"
+      >
+        <ChevronDown
+          className={cn(
+            'size-5 transition-transform motion-reduce:transition-none',
+            !open && '-rotate-90',
+          )}
+          aria-hidden
+        />
+      </button>
+      <div className="space-y-3 pr-10">
         <p className="text-xs font-extrabold tracking-[0.16em] uppercase text-muted-foreground">
           Nu · fase {nu.nummer} van {nu.opbouw.fases.length}
         </p>
         <h2 id="nu-kop" className="text-xl font-extrabold sm:text-2xl">
           {nu.fase.naam}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {formatRange(nu.fase.van, nu.fase.tot)}
-          {doel && doel.datum >= vandaag && (
-            <>
-              {' '}
-              · nog {daysBetween(vandaag, doel.datum)} dagen tot {doel.naam}
-            </>
-          )}
-        </p>
-        {heeftTekst(nu.fase.doel) && <RijkeTekst html={nu.fase.doel} />}
-        <div className="flex flex-wrap gap-1.5">
-          {nu.fase.zones.map((id) => (
-            <ZoneChip key={id} zone={plan.zones.find((z) => z.id === id)} />
-          ))}
+        <div
+          id={inhoudId}
+          className={cn('space-y-3', !open && 'hidden print:block')}
+        >
+          <p className="text-sm text-muted-foreground">
+            {formatRange(nu.fase.van, nu.fase.tot)}
+            {doel && doel.datum >= vandaag && (
+              <>
+                {' '}
+                · nog {daysBetween(vandaag, doel.datum)} dagen tot {doel.naam}
+              </>
+            )}
+          </p>
+          {heeftTekst(nu.fase.doel) && <RijkeTekst html={nu.fase.doel} />}
+          <div className="flex flex-wrap gap-1.5">
+            {nu.fase.zones.map((id) => (
+              <ZoneChip key={id} zone={plan.zones.find((z) => z.id === id)} />
+            ))}
+          </div>
         </div>
       </div>
-      <div className="rounded-xl bg-muted/60 p-4">
+      <div
+        className={cn(
+          'rounded-xl bg-muted/60 p-4',
+          !open && 'hidden print:block',
+        )}
+      >
         <h3 className="mb-2 text-sm font-extrabold">Voorbeeldsets</h3>
         {nu.fase.sets.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -687,6 +750,31 @@ function BewerkKnop({
   )
 }
 
+function VerwijderKnop({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      className="size-10 bg-card text-destructive hover:text-destructive print:hidden"
+      aria-label={label}
+      onClick={onClick}
+    >
+      <Trash2 />
+    </Button>
+  )
+}
+
+async function verwijderUitOpbouw(vraag: string, nieuw: Opbouw) {
+  if (!window.confirm(vraag)) return
+  await probeer(() => bewaarOpbouw(nieuw), 'Verwijderd')
+}
+
 function OpbouwBlokken({
   opbouw,
   plan,
@@ -791,6 +879,22 @@ function OpbouwBlokken({
                       onClick={() => setAandacht(a)}
                     />
                   )}
+                  {magBewerken && (
+                    <VerwijderKnop
+                      label={`${a.titel} verwijderen`}
+                      onClick={() =>
+                        verwijderUitOpbouw(
+                          `Aandachtsgebied "${a.titel}" verwijderen?`,
+                          {
+                            ...opbouw,
+                            aandachtsgebieden: opbouw.aandachtsgebieden.filter(
+                              (x) => x.id !== a.id,
+                            ),
+                          },
+                        )
+                      }
+                    />
+                  )}
                 </div>
                 <RijkeTekst html={a.tekst} className="text-sm" />
               </article>
@@ -839,46 +943,69 @@ function OpbouwBlokken({
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {opbouw.fases.map((f, i) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => onFase(f)}
-                className="flex flex-col overflow-hidden rounded-2xl border bg-card text-left outline-none hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                <span
-                  className="h-2"
-                  style={{ background: f.kleur }}
-                  aria-hidden
-                />
-                <span className="flex flex-1 flex-col gap-1.5 p-4">
-                  <span className="text-xs font-extrabold tracking-wider text-muted-foreground uppercase">
-                    Fase {i + 1} ·{' '}
-                    {Math.max(
-                      1,
-                      Math.round((daysBetween(f.van, f.tot) + 1) / 7),
-                    )}{' '}
-                    weken
+              <div key={f.id} className="relative flex">
+                {magBewerken && (
+                  <span className="absolute top-4 right-2 z-10 flex gap-1">
+                    <BewerkKnop
+                      label={`Fase ${f.naam} bewerken`}
+                      onClick={() => setFase(f)}
+                    />
+                    <VerwijderKnop
+                      label={`Fase ${f.naam} verwijderen`}
+                      onClick={() =>
+                        verwijderUitOpbouw(`Fase "${f.naam}" verwijderen?`, {
+                          ...opbouw,
+                          fases: opbouw.fases.filter((x) => x.id !== f.id),
+                        })
+                      }
+                    />
                   </span>
-                  <span className="font-extrabold leading-snug">{f.naam}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {formatRange(f.van, f.tot)}
+                )}
+                <button
+                  type="button"
+                  onClick={() => onFase(f)}
+                  className={cn(
+                    'flex flex-1 flex-col overflow-hidden rounded-2xl border bg-card text-left outline-none hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                    magBewerken && 'pt-12',
+                  )}
+                >
+                  <span
+                    className="h-2"
+                    style={{ background: f.kleur }}
+                    aria-hidden
+                  />
+                  <span className="flex flex-1 flex-col gap-1.5 p-4">
+                    <span className="text-xs font-extrabold tracking-wider text-muted-foreground uppercase">
+                      Fase {i + 1} ·{' '}
+                      {Math.max(
+                        1,
+                        Math.round((daysBetween(f.van, f.tot) + 1) / 7),
+                      )}{' '}
+                      weken
+                    </span>
+                    <span className="font-extrabold leading-snug">
+                      {f.naam}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {formatRange(f.van, f.tot)}
+                    </span>
+                    <span className="line-clamp-3 text-sm">
+                      <RijkeTekst html={f.doel} />
+                    </span>
+                    <span className="mt-auto flex flex-wrap gap-1 pt-1">
+                      {f.zones.map((id) => (
+                        <ZoneChip
+                          key={id}
+                          zone={plan.zones.find((z) => z.id === id)}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-sm font-bold text-primary">
+                      {f.sets.length} voorbeeldsets ›
+                    </span>
                   </span>
-                  <span className="line-clamp-3 text-sm">
-                    <RijkeTekst html={f.doel} />
-                  </span>
-                  <span className="mt-auto flex flex-wrap gap-1 pt-1">
-                    {f.zones.map((id) => (
-                      <ZoneChip
-                        key={id}
-                        zone={plan.zones.find((z) => z.id === id)}
-                      />
-                    ))}
-                  </span>
-                  <span className="text-sm font-bold text-primary">
-                    {f.sets.length} voorbeeldsets ›
-                  </span>
-                </span>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -911,7 +1038,13 @@ function OpbouwBlokken({
   )
 }
 
-function LegeOpbouw({ magBewerken }: { magBewerken: boolean }) {
+function LegeOpbouw({
+  magBewerken,
+  magJaarplan,
+}: {
+  magBewerken: boolean
+  magJaarplan: boolean
+}) {
   const [bezig, setBezig] = useState(false)
   return (
     <div className="space-y-3 rounded-2xl border border-dashed p-6 text-center">
@@ -936,6 +1069,10 @@ function LegeOpbouw({ magBewerken }: { magBewerken: boolean }) {
             Trainingsopbouw sept–dec 2026 inladen
           </Button>
         </>
+      ) : magJaarplan ? (
+        <p className="text-sm text-muted-foreground">
+          Zet "Jaarplan bewerken" aan om te beginnen.
+        </p>
       ) : (
         <p className="text-sm text-muted-foreground">
           De trainer die het jaarplan maakt, vult dit in.
