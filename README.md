@@ -1,3 +1,4 @@
+<!-- Fix: fix-6 — nieuw webadres -->
 <!-- Fix: fix-1 -->
 # NatUtrecht Trainersapp
 
@@ -36,7 +37,7 @@ Alle rechten worden afgedwongen in [`firestore.rules`](firestore.rules).
 3. Maak in Google Cloud een serviceaccount met de rol *Firebase Admin*, maak een JSON-sleutel en zet die als GitHub-secret `FIREBASE_SERVICE_ACCOUNT`.
 4. Zet in GitHub (Settings → Secrets and variables → Actions → **Variables**) de variabele `HOOFDTRAINER_EMAIL` op het e-mailadres van de hoofdtrainer.
 
-Elke merge naar `main` deployt dan de app en de Firestore-regels.
+Elke merge naar `main` deployt dan de app en de Firestore-regels. De app staat op **https://natutrecht-trainersapp.web.app** (en ook nog op het oude adres trainers-app-1b158.web.app); beide sites staan in `firebase.json`.
 
 ### Herstel en aandachtspunten
 
