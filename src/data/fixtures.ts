@@ -1,3 +1,4 @@
+// Fix: fix-34 — training volgens het trainingsschema: opzet, doel, onderdelen met afstand/tijd, per baan, aandachtspunten
 // Fix: fix-30 — training: wie hem toevoegde
 // Fix: fix-29 — trainingen: meerdere groepen (of hele groep / op inschrijving), focus uitgebreid
 // Fix: fix-28 — demo-trainer heeft een vaste id en is een gewone trainer
@@ -190,9 +191,24 @@ export const ALLE_FOCUS: Focus[] = [
 ]
 
 export interface TrainingBlok {
+  /** Soort onderdeel (voor oudere trainingen en statistiek); bij nieuwe afgeleid uit de naam. */
   onderdeel: 'Inzwemmen' | 'Techniek' | 'Kern' | 'Benen' | 'Armen' | 'Uitzwemmen'
+  /** De invulling: wat er gezwommen wordt. */
   omschrijving: string
   meters: number
+  /** fix-34: naam zoals in het schema, bv. "Starts op fluitsignaal". */
+  naam?: string
+  /** fix-34: afstand als tekst, bv. "4 x 100 m wisselslag"; meters worden hieruit berekend. */
+  afstand?: string
+  /** fix-34: tijd als tekst, bv. "8 min". */
+  tijd?: string
+}
+
+/** fix-34: aanpassing voor een paar banen, bv. 1-2 (snel): 5 x 100 m wisselslag, circa 1.775 m. */
+export interface PerBaan {
+  banen: string
+  aanpassing: string
+  totaal: string
 }
 
 export const ONDERDELEN: TrainingBlok['onderdeel'][] = [
@@ -221,6 +237,17 @@ export interface Training {
   bijlage?: string
   /** Wie de training heeft toegevoegd; alleen die mag hem wijzigen (fix-30). */
   aangemaaktDoor?: string
+  // fix-34: dezelfde opbouw als het trainingsschema (allemaal optioneel voor oudere trainingen).
+  /** Eén regel, bv. "60 minuten • 6 banen, 25 m". */
+  opzet?: string
+  /** Doel van de training; standaard uit de fase van het jaarplan. */
+  doel?: string
+  /** Toelichting bij het totaal. */
+  totaalToelichting?: string
+  /** Toelichting bij "Aanpassen per baan", bv. "de 100%-set is voor iedereen 4 x 50 m". */
+  perBaanToelichting?: string
+  perBaan?: PerBaan[]
+  aandachtspunten?: string[]
 }
 
 export interface Periode {

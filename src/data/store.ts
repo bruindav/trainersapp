@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-34 — nieuwe trainingsvelden inlezen
  * Fix: fix-32 — bijlage (het bestand zelf) bij een training bewaren
  * Fix: fix-30 — eigen training wijzigen
  * Fix: fix-29 — trainingen met meerdere groepen
@@ -269,6 +270,12 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
               notities: x.notities ?? '',
               bijlage: x.bijlage ?? undefined,
               aangemaaktDoor: x.aangemaaktDoor ?? undefined,
+              opzet: x.opzet ?? undefined,
+              doel: x.doel ?? undefined,
+              totaalToelichting: x.totaalToelichting ?? undefined,
+              perBaanToelichting: x.perBaanToelichting ?? undefined,
+              perBaan: Array.isArray(x.perBaan) ? x.perBaan : undefined,
+              aandachtspunten: Array.isArray(x.aandachtspunten) ? x.aandachtspunten : undefined,
             }
             return t
           })
@@ -599,6 +606,16 @@ export function herstelRotatie(weekStart: string) {
 
 export type TrainingVelden = Omit<Training, 'id' | 'aangemaaktDoor'>
 
+/** fix-34: velden van het trainingsschema die leeg mogen blijven. */
+export const OPTIONELE_TRAININGSVELDEN = [
+  'opzet',
+  'doel',
+  'totaalToelichting',
+  'perBaanToelichting',
+  'perBaan',
+  'aandachtspunten',
+] as const
+
 /** Een bestand bij een training (fix-32), bewaard in bijlagen/{trainingId}. */
 function zetBijlage(batch: ReturnType<typeof writeBatch>, trainingId: string, bijlage: BijlageData) {
   batch.set(doc(getDb(), 'bijlagen', trainingId), {
@@ -630,10 +647,15 @@ export function voegTrainingToe(training: TrainingVelden, bijlage?: BijlageData)
  */
 export function werkTrainingBij(id: string, training: TrainingVelden, bijlage?: BijlageData | null) {
   const batch = writeBatch(getDb())
+  // Leeggemaakte optionele velden moeten ook echt uit het document (fix-34).
+  const weg = Object.fromEntries(
+    (['bijlage', ...OPTIONELE_TRAININGSVELDEN] as const)
+      .filter((k) => training[k] === undefined)
+      .map((k) => [k, deleteField()]),
+  )
   batch.update(doc(getDb(), 'trainingen', id), {
     ...training,
-    // Een weggehaalde bijlage moet ook echt uit het document.
-    bijlage: training.bijlage ?? deleteField(),
+    ...weg,
     gewijzigdOp: serverTimestamp(),
   })
   if (bijlage) zetBijlage(batch, id, bijlage)

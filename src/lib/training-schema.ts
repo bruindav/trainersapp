@@ -1,3 +1,4 @@
+// Fix: fix-34 — elk deel van het schema in een eigen vak
 // Fix: fix-32 — trainingsschema (pdf volgens het vaste sjabloon) inlezen
 //
 // Het sjabloon (zoals gemaakt in de trainingschats):
@@ -12,7 +13,7 @@
 //   Aandachtspunten • ...
 //
 // Pure functies: de tekst met posities komt uit pdf-tekst.ts (pdf.js).
-import { ALLE_FOCUS, type Focus, type TrainingBlok } from '@/data/fixtures'
+import { ALLE_FOCUS, type Focus, type PerBaan, type TrainingBlok } from '@/data/fixtures'
 
 /** Een stukje tekst uit de pdf met zijn positie (x van links, y van onder). */
 export interface Tekstdeel {
@@ -27,11 +28,18 @@ export interface TrainingSchema {
   datum: string
   /** Dagnaam uit de titel, bv. "zondag". */
   dag: string
+  opzet: string
+  doel: string
   blokken: TrainingBlok[]
-  notities: string
-  focus: Focus[]
   /** Totaal volgens de pdf (meters), als die er staat. */
   totaal: number | null
+  totaalToelichting: string
+  perBaanToelichting: string
+  perBaan: PerBaan[]
+  aandachtspunten: string[]
+  /** Wat niet in een vak past. */
+  notities: string
+  focus: Focus[]
 }
 
 const MAANDEN = [
@@ -92,7 +100,7 @@ export function leesMeters(afstand: string): number {
   return los ? Number(los[1].replace(/\./g, '')) : 0
 }
 
-function onderdeelVan(naam: string): TrainingBlok['onderdeel'] {
+export function onderdeelVan(naam: string): TrainingBlok['onderdeel'] {
   const n = naam.toLowerCase()
   if (n.includes('inzwem')) return 'Inzwemmen'
   if (n.includes('uitzwem')) return 'Uitzwemmen'
@@ -182,55 +190,71 @@ export function leesTrainingSchema(delen: Tekstdeel[]): TrainingSchema | null {
   }
   if (!rijen.length) return null
 
-  const blokken: TrainingBlok[] = rijen.map(
-    ([naam, afstand, tijd, invulling]) => {
-      const onderdeel = onderdeelVan(naam)
-      const kop =
-        naam.toLowerCase() === onderdeel.toLowerCase() ? '' : `${naam} – `
-      const tijdTekst = tijd ? ` (${tijd})` : ''
-      return {
-        onderdeel,
-        omschrijving: `${kop}${afstand}${tijdTekst}: ${invulling}`.trim(),
-        meters: leesMeters(afstand),
-      }
-    },
-  )
+  const blokken: TrainingBlok[] = rijen.map(([naam, afstand, tijd, invulling]) => ({
+    onderdeel: onderdeelVan(naam),
+    naam,
+    afstand,
+    tijd,
+    omschrijving: invulling,
+    meters: leesMeters(afstand),
+  }))
 
-  // Rest (aanpassen per baan, aandachtspunten) gaat naar de notities.
-  const rest: string[] = []
+  // Na de tabel: "Aanpassen per baan" (tabel) en "Aandachtspunten" (opsomming).
+  let perBaanToelichting = ''
+  const perBaan: PerBaan[] = []
+  const aandachtspunten: string[] = []
+  const overig: string[] = []
+  let sectie: 'geen' | 'perBaan' | 'aandacht' = 'geen'
+  let baanKoppen: { x: number; tekst: string }[] = []
   for (; i < regels.length; i++) {
     const r = regels[i]
-    const tekst = tekstVan(r, r.delen.length > 1 ? ' · ' : ' ')
-    const vorige = rest[rest.length - 1]
-    // Een opsommingspunt dat doorloopt op de volgende regel hoort bij elkaar.
-    const vervolg =
-      vorige !== undefined &&
-      vorige.startsWith('•') &&
-      !tekst.startsWith('•') &&
-      r.delen.length === 1 &&
-      !/^[A-Z][a-z]+( [a-z]+)*( \(.*\))?$/.test(tekst)
-    if (vervolg) rest[rest.length - 1] = plak(vorige, tekst)
-    else {
-      // Een kopje (één tekstdeel, geen opsommingspunt) krijgt een witregel ervoor.
-      if (rest.length && r.delen.length === 1 && !tekst.startsWith('•'))
-        rest.push('')
-      rest.push(tekst)
+    const tekst = tekstVan(r)
+    if (/^aanpassen per baan/i.test(tekst)) {
+      sectie = 'perBaan'
+      perBaanToelichting = tekst.match(/\((.*)\)/)?.[1] ?? ''
+      baanKoppen = []
+      continue
     }
+    if (/^aandachtspunten\b/i.test(tekst)) {
+      sectie = 'aandacht'
+      continue
+    }
+    if (sectie === 'perBaan' && r.delen.length > 1) {
+      if (!baanKoppen.length) {
+        baanKoppen = r.delen.map((d) => ({ x: d.x, tekst: d.tekst.trim() }))
+        continue
+      }
+      const cellen = baanKoppen.map(() => '')
+      for (const d of r.delen) {
+        let k = 0
+        baanKoppen.forEach((kop, j) => {
+          if (d.x >= kop.x - 3) k = j
+        })
+        cellen[k] = plak(cellen[k], d.tekst)
+      }
+      const midden = baanKoppen.slice(1, -1).map((kop, j) => `${kop.tekst}: ${cellen[j + 1]}`)
+      perBaan.push({
+        banen: cellen[0],
+        aanpassing: midden.filter((m) => !/:\s*$/.test(m)).join(' · '),
+        totaal: baanKoppen.length > 1 ? cellen[cellen.length - 1] : '',
+      })
+      continue
+    }
+    if (sectie === 'aandacht') {
+      if (tekst.startsWith('•')) aandachtspunten.push(tekst.replace(/^•\s*/, ''))
+      else if (aandachtspunten.length) aandachtspunten[aandachtspunten.length - 1] = plak(aandachtspunten[aandachtspunten.length - 1], tekst)
+      else overig.push(tekst)
+      continue
+    }
+    overig.push(tekst)
   }
 
-  const notities = [
-    inleiding.join(' '),
-    totaalNoot && `Totaal: ${totaalNoot}`,
-    rest.join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-    .slice(0, MAX_NOTITIES)
+  // Inleiding: eerste regel met "minuten" of "•" is de opzet, de rest is het doel.
+  const opzetIndex = inleiding.findIndex((r) => /minuten|•|banen/i.test(r))
+  const opzet = opzetIndex === 0 ? inleiding[0] : ''
+  const doel = inleiding.slice(opzet ? 1 : 0).join(' ')
 
-  const focusTekst = [
-    inleiding.join(' '),
-    ...rijen.map((r) => `${r[0]} ${r[1]}`),
-  ].join(' ')
+  const focusTekst = [doel, ...rijen.map((r) => `${r[0]} ${r[1]}`)].join(' ')
   const focus = FOCUS_WOORDEN.filter(([, re]) => re.test(focusTekst))
     .map(([f]) => f)
     .filter((f) => ALLE_FOCUS.includes(f))
@@ -238,9 +262,15 @@ export function leesTrainingSchema(delen: Tekstdeel[]): TrainingSchema | null {
   return {
     datum,
     dag: titel[1].toLowerCase(),
+    opzet,
+    doel,
     blokken,
-    notities,
-    focus,
     totaal,
+    totaalToelichting: totaalNoot,
+    perBaanToelichting,
+    perBaan,
+    aandachtspunten,
+    notities: overig.join('\n').slice(0, MAX_NOTITIES),
+    focus,
   }
 }

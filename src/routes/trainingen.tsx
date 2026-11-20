@@ -1,3 +1,4 @@
+// Fix: fix-34 — training in de opbouw van het trainingsschema (opzet, doel, onderdelen, per baan, aandachtspunten)
 // Fix: fix-33 — trainingsmoment: ook een andere (oudere) datum kiezen
 // Fix: fix-32 — bijlage echt bewaren en openen; trainingsschema-pdf inlezen in de velden
 // Fix: fix-31 — ook wie de training gaf mag wijzigen/verwijderen; coördinator verwijdert
@@ -43,11 +44,11 @@ import { geeftTraining,
   groepenLabel,
   standaardTitel,
   trainingVoorGroep,
-  ONDERDELEN,
   SESSIES,
   sessieDatum,
   type Focus,
   type Training,
+  type PerBaan,
   type TrainingBlok,
 } from '@/data/fixtures'
 import {
@@ -64,6 +65,15 @@ import { DAGEN, dagVan } from '@/data/rooster'
 import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, formatLong, formatShort, startOfWeek, todayISO } from '@/lib/dates'
 import { MAX_BESTAND_KB, maakBijlage, openBijlage, type BijlageData } from '@/lib/bijlage'
+import {
+  AandachtspuntenInvoer,
+  LEEG_ONDERDEEL,
+  OnderdelenInvoer,
+  PerBaanInvoer,
+  TrainingInhoud,
+  alsSchemaBlok,
+} from '@/components/training-inhoud'
+import { standaardDoel } from '@/data/jaarplan'
 import { cn } from '@/lib/utils'
 
 interface Zoek {
@@ -110,7 +120,9 @@ function TrainingenPagina() {
         (!q ||
           t.titel.toLowerCase().includes(q) ||
           t.notities.toLowerCase().includes(q) ||
-          t.blokken.some((b) => b.omschrijving.toLowerCase().includes(q))),
+          t.blokken.some((b) => `${b.naam ?? ''} ${b.omschrijving}`.toLowerCase().includes(q)) ||
+          (t.doel ?? '').toLowerCase().includes(q) ||
+          (t.aandachtspunten ?? []).some((p) => p.toLowerCase().includes(q))),
     )
   }, [data.trainingen, periode, groep, trainer, focus, tekst, vandaag])
 
@@ -368,7 +380,7 @@ function TrainingKaart({ training: t, onOpen }: { training: Training; onOpen: ()
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
           {t.blokken
             .filter((b) => b.onderdeel !== 'Inzwemmen' && b.onderdeel !== 'Uitzwemmen')
-            .map((b) => b.omschrijving)
+            .map((b) => b.naam || b.omschrijving)
             .join(' · ')}
         </p>
       )}
@@ -419,8 +431,8 @@ function TrainingDetail({
         {t && (
           <>
             <SheetHeader>
-              <SheetTitle className="text-xl font-black">{t.titel}</SheetTitle>
-              <SheetDescription className="capitalize">
+              <SheetTitle className="pr-8 text-xl font-black">{t.titel}</SheetTitle>
+              <SheetDescription className="first-letter:uppercase">
                 {formatLong(t.datum)} · {sessieById(t.sessieId).start} · {groepenLabel(t.groepen)}
               </SheetDescription>
             </SheetHeader>
@@ -439,17 +451,7 @@ function TrainingDetail({
                 ))}
               </div>
 
-              {t.blokken.length > 0 && (
-                <ol className="space-y-2">
-                  {t.blokken.map((b, i) => (
-                    <li key={i} className="flex gap-3 rounded-lg border p-3">
-                      <span className="w-20 shrink-0 text-xs font-bold tracking-wide text-primary uppercase">{b.onderdeel}</span>
-                      <span className="flex-1 text-sm">{b.omschrijving}</span>
-                      <span className="text-sm font-bold whitespace-nowrap">{b.meters} m</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <TrainingInhoud training={t} />
 
               {t.bijlage && <BijlageOpenen trainingId={t.id} naam={t.bijlage} />}
 
@@ -502,8 +504,6 @@ function TrainingDetail({
 // ---------------------------------------------------------------------------
 
 const ANDERE_DATUM = 'andere-datum'
-
-const LEEG_BLOK: TrainingBlok = { onderdeel: 'Kern', omschrijving: '', meters: 0 }
 
 function NieuweTraining({
   basis: kopie,
@@ -567,13 +567,21 @@ function NieuweTraining({
   const [andersTekst, setAndersTekst] = useState(basisAnders)
   const [blokken, setBlokken] = useState<TrainingBlok[]>(
     basis?.blokken.length
-      ? basis.blokken.map((b) => ({ ...b }))
+      ? basis.blokken.map(alsSchemaBlok)
       : [
-          { onderdeel: 'Inzwemmen', omschrijving: '', meters: 400 },
-          { ...LEEG_BLOK },
-          { onderdeel: 'Uitzwemmen', omschrijving: 'Rustig naar keuze', meters: 200 },
+          { onderdeel: 'Inzwemmen', naam: 'Inzwemmen', afstand: '400 m', tijd: '', omschrijving: '', meters: 400 },
+          { ...LEEG_ONDERDEEL },
+          { onderdeel: 'Uitzwemmen', naam: 'Uitzwemmen', afstand: '200 m', tijd: '', omschrijving: 'Rustig, keuze.', meters: 200 },
         ],
   )
+  // fix-34: dezelfde vakken als het trainingsschema.
+  const [opzet, setOpzet] = useState(basis?.opzet ?? '')
+  // Het doel volgt de fase van het jaarplan op de gekozen datum, tot de trainer het zelf aanpast.
+  const [eigenDoel, setEigenDoel] = useState<string | null>(bewerk ? (bewerk.doel ?? '') : (kopie?.doel ?? null))
+  const [totaalToelichting, setTotaalToelichting] = useState(basis?.totaalToelichting ?? '')
+  const [perBaan, setPerBaan] = useState<PerBaan[]>(basis?.perBaan?.map((r) => ({ ...r })) ?? [])
+  const [perBaanToelichting, setPerBaanToelichting] = useState(basis?.perBaanToelichting ?? '')
+  const [aandachtspunten, setAandachtspunten] = useState<string[]>(basis?.aandachtspunten ?? [])
   const [notities, setNotities] = useState(bewerk?.notities ?? '')
   const [bestand, setBestand] = useState<File | null>(null)
   // Bij wijzigen: de al bewaarde bijlage weghalen.
@@ -603,6 +611,12 @@ function NieuweTraining({
       if (!schema) return
       setBlokken(schema.blokken)
       setNotities(schema.notities)
+      setOpzet(schema.opzet)
+      setEigenDoel(schema.doel || null)
+      setTotaalToelichting(schema.totaalToelichting)
+      setPerBaan(schema.perBaan)
+      setPerBaanToelichting(schema.perBaanToelichting)
+      setAandachtspunten(schema.aandachtspunten)
       setFocus(schema.focus)
       setAnders(false)
       setAndersTekst('')
@@ -624,6 +638,8 @@ function NieuweTraining({
   const [momentDatum, momentSessie] = moment.split('|')
   const sessie = SESSIES.find((s) => s.id === momentSessie)
   const titel = eigenTitel ?? (sessie && momentDatum ? standaardTitel(sessie.dag, momentDatum) : '')
+  const doelUitJaarplan = momentDatum ? standaardDoel(data.jaarplan, momentDatum) : ''
+  const doel = eigenDoel ?? doelUitJaarplan
 
   /** Hele groep en Op inschrijving staan alleen; drie losse groepen samen = hele groep. */
   const kiesGroep = (id: string) => {
@@ -633,22 +649,20 @@ function NieuweTraining({
     setGroepen(nieuw.length === GROEPEN.length ? [HELE_GROEP] : nieuw)
   }
 
-  const totaal = blokken.reduce((n, b) => n + (b.meters || 0), 0)
   const fouten: string[] = []
   if (!titel.trim()) fouten.push('Geef de training een titel.')
   if (!moment) fouten.push('Kies een trainingsmoment.')
   if (!groepen.length) fouten.push('Kies de groep: hele groep, een of meer groepen, of op inschrijving.')
   if (anders && !andersTekst.trim()) fouten.push('Vul in wat de andere focus is, of zet "Anders" uit.')
-  if (modus === 'samenstellen' && !blokken.some((b) => b.omschrijving.trim() && b.meters > 0))
-    fouten.push('Voeg minstens één onderdeel met omschrijving en meters toe.')
+  if (modus === 'samenstellen' && !blokken.some((b) => b.meters > 0))
+    fouten.push('Vul bij minstens één onderdeel een afstand in, bijvoorbeeld "400 m" of "4 x 100 m".')
   if (modus === 'uploaden' && !bijlageNaam) fouten.push('Kies een bestand om te uploaden.')
 
-  const updateBlok = (i: number, patch: Partial<TrainingBlok>) =>
-    setBlokken(blokken.map((b, j) => (j === i ? { ...b, ...patch } : b)))
 
   return (
     <form
-      className="space-y-5"
+      // min-w-0: anders maakt lange tekst (bv. een ingelezen schema) het formulier breder dan het scherm.
+      className="min-w-0 space-y-5"
       noValidate
       onSubmit={async (e) => {
         e.preventDefault()
@@ -676,11 +690,34 @@ function NieuweTraining({
           notities: notities.trim(),
           blokken:
             modus === 'samenstellen'
-              ? blokken.filter((b) => b.omschrijving.trim() || b.meters > 0)
+              ? blokken
+                  .filter((b) => b.naam?.trim() || b.omschrijving.trim() || b.meters > 0)
+                  .map((b) => ({
+                    ...b,
+                    naam: b.naam?.trim() ?? '',
+                    afstand: b.afstand?.trim() ?? '',
+                    tijd: b.tijd?.trim() ?? '',
+                    omschrijving: b.omschrijving.trim(),
+                  }))
               : meters > 0
                 ? [{ onderdeel: 'Kern', omschrijving: 'Zie bijlage', meters }]
                 : [],
           bijlage: bijlage?.naam ?? bestaandeBijlage ?? undefined,
+          // fix-34: lege vakken worden niet bewaard.
+          opzet: opzet.trim() || undefined,
+          doel: doel.trim() || undefined,
+          totaalToelichting: totaalToelichting.trim() || undefined,
+          perBaanToelichting: perBaan.length ? perBaanToelichting.trim() || undefined : undefined,
+          perBaan: (() => {
+            const rijen = perBaan
+              .map((r) => ({ banen: r.banen.trim(), aanpassing: r.aanpassing.trim(), totaal: r.totaal.trim() }))
+              .filter((r) => r.banen || r.aanpassing || r.totaal)
+            return rijen.length ? rijen : undefined
+          })(),
+          aandachtspunten: (() => {
+            const punten = aandachtspunten.map((p) => p.trim()).filter(Boolean)
+            return punten.length ? punten : undefined
+          })(),
         }
         if (bewerk) {
           werkTrainingBij(bewerk.id, velden, bijlage ?? (bewerk.bijlage && bijlageWeg ? null : undefined))
@@ -841,6 +878,48 @@ function NieuweTraining({
         )}
       </fieldset>
 
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="n-opzet">Opzet</Label>
+          <Input
+            id="n-opzet"
+            value={opzet}
+            onChange={(e) => setOpzet(e.target.value)}
+            placeholder="Bijv. 60 minuten • 6 banen, 25 m"
+            maxLength={200}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="n-doel">Doel</Label>
+          <Textarea
+            id="n-doel"
+            rows={3}
+            value={doel}
+            onChange={(e) => setEigenDoel(e.target.value)}
+            placeholder="Waar werk je deze training aan?"
+            maxLength={2000}
+            aria-describedby="n-doel-hulp"
+          />
+          <p id="n-doel-hulp" className="text-xs text-muted-foreground">
+            {eigenDoel === null ? (
+              doelUitJaarplan ? (
+                'Overgenomen uit het jaarplan (de fase op deze datum). Pas gerust aan.'
+              ) : (
+                'Het jaarplan heeft geen fase op deze datum; vul zelf het doel in.'
+              )
+            ) : doelUitJaarplan ? (
+              <button
+                type="button"
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+                onClick={() => setEigenDoel(null)}
+              >
+                Doel uit het jaarplan overnemen
+              </button>
+            ) : null}
+          </p>
+        </div>
+      </div>
+
       <Tabs value={modus} onValueChange={(v) => setModus(v as typeof modus)}>
         <TabsList className="w-full">
           <TabsTrigger value="samenstellen">
@@ -854,63 +933,18 @@ function NieuweTraining({
         <TabsContent value="samenstellen" className="mt-4 space-y-3">
           {overgenomen && (
             <p role="status" className="rounded-lg bg-accent/60 p-3 text-sm">
-              <strong>Overgenomen uit het trainingsschema.</strong> Onderdelen, notities, focus en moment zijn ingevuld;
-              controleer ze even. De pdf wordt als bijlage bewaard.
+              <strong>Overgenomen uit het trainingsschema.</strong> Opzet, doel, onderdelen, aanpassingen per baan,
+              aandachtspunten, focus en moment zijn ingevuld; controleer ze even. De pdf wordt als bijlage bewaard.
             </p>
           )}
-          {blokken.map((b, i) => (
-            <div key={i} className="grid grid-cols-[7.5rem_1fr_5.5rem_auto] items-center gap-2">
-              <Select value={b.onderdeel} onValueChange={(v) => updateBlok(i, { onderdeel: v as TrainingBlok['onderdeel'] })}>
-                <SelectTrigger className="w-full" aria-label={`Onderdeel ${i + 1}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ONDERDELEN.map((o) => (
-                    <SelectItem key={o} value={o}>
-                      {o}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={b.omschrijving}
-                onChange={(e) => updateBlok(i, { omschrijving: e.target.value })}
-                placeholder="Bijv. 8×50 vrij op 1:00"
-                aria-label={`Omschrijving onderdeel ${i + 1}`}
-              />
-              <div className="relative">
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={25}
-                  value={b.meters || ''}
-                  onChange={(e) => updateBlok(i, { meters: Math.max(0, Number(e.target.value) || 0) })}
-                  className="pr-6"
-                  aria-label={`Meters onderdeel ${i + 1}`}
-                />
-                <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">m</span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setBlokken(blokken.filter((_, j) => j !== i))}
-                disabled={blokken.length === 1}
-                aria-label={`Verwijder onderdeel ${i + 1}`}
-              >
-                <X />
-              </Button>
-            </div>
-          ))}
-          <div className="flex items-center justify-between">
-            <Button type="button" variant="outline" size="sm" onClick={() => setBlokken([...blokken, { ...LEEG_BLOK }])}>
-              <Plus /> Onderdeel toevoegen
-            </Button>
-            <p className="text-sm">
-              Totaal: <span className="font-black">{totaal.toLocaleString('nl-NL')} m</span>
-            </p>
-          </div>
+          <OnderdelenInvoer
+            blokken={blokken}
+            onChange={setBlokken}
+            totaalToelichting={totaalToelichting}
+            onTotaalToelichting={setTotaalToelichting}
+          />
+          <PerBaanInvoer rijen={perBaan} onChange={setPerBaan} toelichting={perBaanToelichting} onToelichting={setPerBaanToelichting} />
+          <AandachtspuntenInvoer punten={aandachtspunten} onChange={setAandachtspunten} />
         </TabsContent>
 
         <TabsContent value="uploaden" className="mt-4 space-y-4">

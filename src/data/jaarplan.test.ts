@@ -1,10 +1,20 @@
 // Fix: fix-21 — jaarplan: oude documenten, huidige fase, tijdlijn
+// Fix: fix-34 — standaarddoel van een training
 import { describe, expect, it } from 'vitest'
 
 import { maakVeilig } from '@/components/rijke-tekst'
 
 import { STANDAARD_ZONES } from './fixtures'
-import { faseOp, huidigeOpbouw, normaliseerJaarplan, opbouwBereik, tijdlijnPositie, volgendeWedstrijd } from './jaarplan'
+import {
+  faseOp,
+  huidigeOpbouw,
+  htmlNaarTekst,
+  normaliseerJaarplan,
+  opbouwBereik,
+  standaardDoel,
+  tijdlijnPositie,
+  volgendeWedstrijd,
+} from './jaarplan'
 import { OPBOUW_SEPT_DEC_2026 } from './jaarplan-voorbeeld'
 
 describe('jaarplan', () => {
@@ -41,5 +51,19 @@ describe('opgemaakte tekst', () => {
     expect(uit).toContain('<span style="color: #c4362b">rood</span>')
     expect(uit).toContain('<ul><li>a</li></ul>')
     expect(uit).not.toMatch(/script|onclick|onerror|href|<img|position/)
+  })
+})
+
+describe('standaardDoel (fix-34)', () => {
+  const j = normaliseerJaarplan({ opbouwen: [OPBOUW_SEPT_DEC_2026] })
+  it('neemt fase, week en doel over uit het jaarplan', () => {
+    const f = OPBOUW_SEPT_DEC_2026.fases[2]
+    expect(standaardDoel(j, f.van)).toBe(`Fase 3, week 1: ${f.naam}. ${htmlNaarTekst(f.doel)}`)
+  })
+  it('leeg buiten de fases', () => {
+    expect(standaardDoel(j, '2030-01-01')).toBe('')
+  })
+  it('html wordt platte tekst', () => {
+    expect(htmlNaarTekst('<p>Snelheid &amp; <strong>tempo</strong></p><ul><li>een</li></ul>')).toBe('Snelheid & tempo een')
   })
 })

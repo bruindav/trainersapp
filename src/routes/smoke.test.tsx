@@ -206,7 +206,7 @@ describe('Training wijzigen', () => {
   })
 })
 
-// Fix: fix-32 — trainingsschema-pdf uploaden vult de velden
+// Fix: fix-32 — trainingsschema-pdf uploaden vult de velden (fix-34: elk vak apart)
 vi.mock('@/lib/pdf-tekst', async () => ({
   leesPdfTekst: async () => (await import('../../tests/fixtures/training-15-november.tekst.json')).default,
 }))
@@ -226,9 +226,18 @@ describe('Trainingsschema uploaden', () => {
       fireEvent.change(document.getElementById('n-bestand')!, { target: { files: [pdf] } })
     })
     expect(await screen.findByText(/Overgenomen uit het trainingsschema/)).toBeInTheDocument()
-    expect(screen.getAllByLabelText(/^Omschrijving onderdeel/)).toHaveLength(7)
+    // fix-34: elk deel in zijn eigen vak, zoals in het schema.
+    expect(screen.getAllByLabelText(/^Invulling onderdeel/)).toHaveLength(7)
+    expect((screen.getByLabelText('Onderdeel 2') as HTMLInputElement).value).toBe('Starts op fluitsignaal')
+    expect((screen.getByLabelText('Afstand onderdeel 3') as HTMLInputElement).value).toBe('4 x 100 m wisselslag')
+    expect((screen.getByLabelText('Tijd onderdeel 1') as HTMLInputElement).value).toBe('8 min')
     expect(screen.getByText('1.675 m')).toBeInTheDocument()
-    expect((screen.getByLabelText(/Notities/) as HTMLTextAreaElement).value).toMatch(/Aandachtspunten/)
+    expect(screen.getByText('51 min')).toBeInTheDocument()
+    expect((screen.getByLabelText('Opzet') as HTMLInputElement).value).toMatch(/^60 minuten • 6 banen/)
+    expect((screen.getByLabelText('Doel') as HTMLTextAreaElement).value).toMatch(/^Fase 3, week 1/)
+    expect(screen.getAllByLabelText(/^Aandachtspunt \d/)).toHaveLength(6)
+    expect((screen.getByLabelText('Banen 1') as HTMLInputElement).value).toBe('1-2 (snel)')
+    expect((screen.getByLabelText(/Notities/) as HTMLTextAreaElement).value).toBe('')
     expect(screen.getByRole('button', { name: /^Wisselslag$/ })).toHaveAttribute('aria-pressed', 'true')
     expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Training zondag op 15 november')
     expect(screen.getByText(/Bijlage: training-15-november\.pdf/)).toBeInTheDocument()

@@ -1,4 +1,5 @@
 // Fix: fix-21 — jaarplan: opbouwen met fases, zones, wedstrijden; tijdlijn-hulpjes
+// Fix: fix-34 — standaarddoel van een training uit de fase van het jaarplan
 import {
   STANDAARD_JAARPLAN,
   STANDAARD_ZONES,
@@ -9,6 +10,7 @@ import {
   type Wedstrijd,
   type Zone,
 } from './fixtures'
+import { daysBetween } from '@/lib/dates'
 
 const isTekst = (v: unknown): v is string => typeof v === 'string'
 const tekst = (v: unknown, standaard = '') => (isTekst(v) ? v : standaard)
@@ -131,4 +133,32 @@ export function tijdlijnPositie(seizoenVan: string, seizoenTot: string, van: str
   const begin = Math.max(0, dag(van) - dag(seizoenVan))
   const eind = Math.min(totaal, dag(tot) - dag(seizoenVan) + 1)
   return { links: (begin / totaal) * 100, breedte: Math.max(0, ((eind - begin) / totaal) * 100) }
+}
+
+/** Platte tekst uit opgemaakte HTML (zonder DOM, ook bruikbaar in tests). */
+export function htmlNaarTekst(html: string) {
+  return html
+    .replace(/<\/(p|li|h\d)>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * fix-34: standaarddoel van een training op `datum`, uit de fase van het jaarplan,
+ * bv. "Fase 3, week 1: Wedstrijdspecifieke snelheid. Omslag naar snelheid …".
+ */
+export function standaardDoel(j: Jaarplan, datum: string): string {
+  const f = faseOp(j, datum)
+  if (!f) return ''
+  const week = Math.floor(daysBetween(f.fase.van, datum) / 7) + 1
+  const doel = htmlNaarTekst(f.fase.doel)
+  return `Fase ${f.nummer}, week ${week}: ${f.fase.naam}.${doel ? ` ${doel}` : ''}`
 }

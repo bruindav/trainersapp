@@ -1,3 +1,4 @@
+// Fix: fix-34 — trainingsvelden van het schema
 // Fix: fix-32 — bijlagen bij trainingen
 // Fix: fix-31 — ook de gever mag wijzigen en verwijderen
 // Fix: fix-30 — training wijzigen en verwijderen door wie hem toevoegde
@@ -381,6 +382,22 @@ describe('rooster, trainingen en jaarplan', () => {
     weg.delete(doc(tdb, 'bijlagen', 'b1'))
     weg.delete(doc(tdb, 'trainingen', 'b1'))
     await assertSucceeds(weg.commit())
+  })
+
+  it('training met de vakken van het trainingsschema; te lang of verkeerd type niet', async () => {
+    const schema = {
+      ...training(TRAINER.uid),
+      opzet: '60 minuten • 6 banen, 25 m',
+      doel: 'Fase 3, week 1: snelheid.',
+      totaalToelichting: 'Circa 9 min speling.',
+      perBaanToelichting: 'de 100%-set is voor iedereen 4 x 50 m',
+      perBaan: [{ banen: '1-2 (snel)', aanpassing: '5 x 100 m wisselslag', totaal: 'circa 1.775 m' }],
+      aandachtspunten: ['Echt 100% is voluit vanaf de start.'],
+    }
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'trainingen', 's1'), schema))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's2'), { ...schema, doel: 'x'.repeat(2001) }))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's3'), { ...schema, aandachtspunten: 'los' }))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's4'), { ...schema, perBaan: Array(11).fill(schema.perBaan[0]) }))
   })
 
   it('alleen coördinator of jaarplanbeheerder wijzigt het jaarplan', async () => {

@@ -1,3 +1,4 @@
+// Fix: fix-34 — trainingen: opzet, doel, toelichtingen, per baan, aandachtspunten
 // Fix: fix-32 — bijlagen: het bestand bij een training
 // Fix: fix-31 — trainingen: ook wie de training gaf mag wijzigen en verwijderen
 // Fix: fix-30 — trainingen: eigen training wijzigen en verwijderen
@@ -463,7 +464,8 @@ service cloud.firestore {
     function geldigeTraining(d) {
       return d.keys().hasOnly([
              'datum', 'sessieId', 'groepId', 'groepen', 'trainerId', 'titel', 'focus', 'blokken',
-             'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp', 'gewijzigdOp'])
+             'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp', 'gewijzigdOp',
+             'opzet', 'doel', 'totaalToelichting', 'perBaanToelichting', 'perBaan', 'aandachtspunten'])
         && isDatum(d.datum)
         && tekst(d.sessieId, 40) && d.sessieId.size() > 0
         && tekst(d.groepId, 40) && d.groepId.size() > 0
@@ -479,7 +481,13 @@ service cloud.firestore {
         && d.focus is list && d.focus.size() <= 13
         && d.blokken is list && d.blokken.size() <= 30
         && tekst(d.notities, 5000)
-        && (!('bijlage' in d) || tekst(d.bijlage, 255));
+        && (!('bijlage' in d) || tekst(d.bijlage, 255))
+        && (!('opzet' in d) || tekst(d.opzet, 200))
+        && (!('doel' in d) || tekst(d.doel, 2000))
+        && (!('totaalToelichting' in d) || tekst(d.totaalToelichting, 500))
+        && (!('perBaanToelichting' in d) || tekst(d.perBaanToelichting, 300))
+        && (!('perBaan' in d) || (d.perBaan is list && d.perBaan.size() <= 10))
+        && (!('aandachtspunten' in d) || (d.aandachtspunten is list && d.aandachtspunten.size() <= 20));
     }
     match /trainingen/{id} {
       allow read: if leest();

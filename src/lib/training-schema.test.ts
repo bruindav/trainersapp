@@ -1,4 +1,5 @@
 // @vitest-environment node
+// Fix: fix-34 — elk deel in een eigen vak
 // Fix: fix-32 — trainingsschema uit de pdf van 15 november inlezen
 import { readFileSync } from 'node:fs'
 
@@ -52,22 +53,25 @@ describe('trainingsschema inlezen', () => {
       400, 75, 400, 300, 200, 100, 200,
     ])
     expect(s.blokken.reduce((n, b) => n + b.meters, 0)).toBe(s.totaal)
-    expect(s.blokken[0]).toMatchObject({ onderdeel: 'Inzwemmen' })
-    expect(s.blokken[0].omschrijving).toMatch(
-      /^400 m \(8 min\): 200 vrij, daarna 4 x 50 .*rust 10 sec\.$/,
-    )
-    expect(s.blokken[1].omschrijving).toMatch(
-      /^Starts op fluitsignaal – 3 x 25 m \(5 min\): Zoals op de wedstrijd/,
-    )
-    expect(s.blokken[2].omschrijving).toMatch(
-      /^Wisselslag – 4 x 100 m wisselslag \(11 min\)/,
-    )
+    expect(s.blokken[0]).toMatchObject({ onderdeel: 'Inzwemmen', naam: 'Inzwemmen', afstand: '400 m', tijd: '8 min' })
+    expect(s.blokken[0].omschrijving).toMatch(/^200 vrij, daarna 4 x 50 .*rust 10 sec\.$/)
+    expect(s.blokken[1]).toMatchObject({ naam: 'Starts op fluitsignaal', afstand: '3 x 25 m', tijd: '5 min' })
+    expect(s.blokken[2]).toMatchObject({ naam: 'Wisselslag', afstand: '4 x 100 m wisselslag', meters: 400 })
     expect(s.blokken[6]).toMatchObject({ onderdeel: 'Uitzwemmen', meters: 200 })
-    expect(s.notities).toMatch(/^60 minuten • 6 banen/)
-    expect(s.notities).toMatch(/Aanpassen per baan/)
-    expect(s.notities).toMatch(
-      /\n• 100%-set bij drukte: splits de baan in twee groepjes\. Groep A zwemt/,
+    expect(s.opzet).toBe('60 minuten • 6 banen, 25 m • circa 1.675 m (middenbanen)')
+    expect(s.doel).toMatch(/^Fase 3, week 1: wedstrijdspecifieke snelheid\..*Kort blok 100 m wisselslag\.$/)
+    expect(s.totaalToelichting).toMatch(/^Minder meters dan vorige weken.*Circa 9 min speling\.$/)
+    expect(s.perBaanToelichting).toBe('de 100%-set is voor iedereen 4 x 50 m')
+    expect(s.perBaan).toEqual([
+      { banen: '1-2 (snel)', aanpassing: 'Wisselslag: 5 x 100 m wisselslag · Herstel: 300 m', totaal: 'circa 1.775 m' },
+      { banen: '3-4 (midden)', aanpassing: 'Wisselslag: 4 x 100 m wisselslag · Herstel: 300 m', totaal: 'circa 1.675 m' },
+      { banen: '5-6 (rustig)', aanpassing: 'Wisselslag: 3 x 100 m wisselslag · Herstel: 200 m', totaal: 'circa 1.475 m' },
+    ])
+    expect(s.aandachtspunten).toHaveLength(6)
+    expect(s.aandachtspunten[0]).toBe(
+      '100%-set bij drukte: splits de baan in twee groepjes. Groep A zwemt, groep B klokt en rust; daarna wisselen. Zo is de rust vanzelf 2-3 min.',
     )
+    expect(s.notities).toBe('')
     expect(s.focus).toEqual(
       expect.arrayContaining(['Wisselslag', 'Starts', 'Snelheid', 'Herstel']),
     )
