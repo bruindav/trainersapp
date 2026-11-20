@@ -1,3 +1,4 @@
+// Fix: fix-29 — standaardtitel, meerdere groepen, focus Borstcrawl/Ademhaling/Anders
 // Fix: fix-11 — herinnering en standaardmoment uit het gepubliceerde rooster
 // Fix: fix-3 — alleen wie training geeft is kiesbaar
 // Fix: fix-1 — trainers uit Firestore i.p.v. vaste lijst
@@ -13,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/app-shell'
@@ -31,6 +32,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { geeftTraining,
   ALLE_FOCUS,
   GROEPEN,
+  HELE_GROEP,
+  OP_INSCHRIJVING,
+  groepenLabel,
+  standaardTitel,
+  trainingVoorGroep,
   ONDERDELEN,
   SESSIES,
   sessieDatum,
@@ -39,7 +45,6 @@ import { geeftTraining,
   type TrainingBlok,
 } from '@/data/fixtures'
 import {
-  groepById,
   sessieById,
   totaalMeters,
   trainerById,
@@ -87,7 +92,7 @@ function TrainingenPagina() {
     return data.trainingen.filter(
       (t) =>
         t.datum >= grens &&
-        (groep === 'alle' || t.groepId === groep) &&
+        (groep === 'alle' || trainingVoorGroep(t.groepen, groep)) &&
         (trainer === 'alle' || t.trainerId === trainer) &&
         focus.every((f) => t.focus.includes(f)) &&
         (!q ||
@@ -187,6 +192,7 @@ function TrainingenPagina() {
                       {g.naam}
                     </SelectItem>
                   ))}
+                  <SelectItem value={OP_INSCHRIJVING}>Op inschrijving</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={trainer} onValueChange={setTrainer}>
@@ -316,7 +322,6 @@ function TrainingenPagina() {
 
 function TrainingKaart({ training: t, onOpen }: { training: Training; onOpen: () => void }) {
   const trainer = trainerById(t.trainerId)!
-  const groep = groepById(t.groepId)
   return (
     <button
       type="button"
@@ -328,7 +333,7 @@ function TrainingKaart({ training: t, onOpen }: { training: Training; onOpen: ()
         <div className="min-w-0 flex-1 text-xs text-muted-foreground">
           <p className="truncate font-semibold text-foreground">{trainer.naam}</p>
           <p>
-            {sessieById(t.sessieId).dag} {sessieById(t.sessieId).start} · {groep.naam} ({groep.banen})
+            {sessieById(t.sessieId).dag} {sessieById(t.sessieId).start} · {groepenLabel(t.groepen)}
           </p>
         </div>
         <span className="text-right">
@@ -380,8 +385,7 @@ function TrainingDetail({
             <SheetHeader>
               <SheetTitle className="text-xl font-black">{t.titel}</SheetTitle>
               <SheetDescription className="capitalize">
-                {formatLong(t.datum)} · {sessieById(t.sessieId).start} · {groepById(t.groepId).naam} (
-                {groepById(t.groepId).banen})
+                {formatLong(t.datum)} · {sessieById(t.sessieId).start} · {groepenLabel(t.groepen)}
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-6 px-4">
@@ -475,10 +479,15 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
 
   const [modus, setModus] = useState<'samenstellen' | 'uploaden'>(basis?.bijlage && !basis.blokken.length ? 'uploaden' : 'samenstellen')
   const [moment, setMoment] = useState(mijnMoment ? `${mijnMoment.datum}|${mijnMoment.sessie.id}` : (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
-  const [groepId, setGroepId] = useState(basis?.groepId ?? GROEPEN[0].id)
+  const [groepen, setGroepen] = useState<string[]>(basis?.groepen ?? [HELE_GROEP])
   const [trainerId, setTrainerId] = useState(data.huidigeTrainerId)
-  const [titel, setTitel] = useState(basis ? basis.titel : '')
-  const [focus, setFocus] = useState<Focus[]>(basis?.focus ?? [])
+  // De titel volgt het gekozen moment ("Training zondag op 22 november") tot de trainer hem zelf aanpast.
+  const basisTitelEigen = !!basis && !/^Training \S+ op /.test(basis.titel)
+  const [eigenTitel, setEigenTitel] = useState<string | null>(basisTitelEigen ? basis!.titel : null)
+  const [focus, setFocus] = useState<Focus[]>((basis?.focus ?? []).filter((f) => ALLE_FOCUS.includes(f)))
+  const basisAnders = (basis?.focus ?? []).filter((f) => !ALLE_FOCUS.includes(f)).join(', ')
+  const [anders, setAnders] = useState(!!basisAnders)
+  const [andersTekst, setAndersTekst] = useState(basisAnders)
   const [blokken, setBlokken] = useState<TrainingBlok[]>(
     basis?.blokken.length
       ? basis.blokken.map((b) => ({ ...b }))
@@ -493,10 +502,24 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
   const [uploadMeters, setUploadMeters] = useState('')
   const [poging, setPoging] = useState(false)
 
+  const [momentDatum, momentSessie] = moment.split('|')
+  const sessie = SESSIES.find((s) => s.id === momentSessie)
+  const titel = eigenTitel ?? (sessie && momentDatum ? standaardTitel(sessie.dag, momentDatum) : '')
+
+  /** Hele groep en Op inschrijving staan alleen; drie losse groepen samen = hele groep. */
+  const kiesGroep = (id: string) => {
+    if (id === HELE_GROEP || id === OP_INSCHRIJVING) return setGroepen([id])
+    const los = groepen.filter((g) => g !== HELE_GROEP && g !== OP_INSCHRIJVING)
+    const nieuw = los.includes(id) ? los.filter((g) => g !== id) : [...los, id]
+    setGroepen(nieuw.length === GROEPEN.length ? [HELE_GROEP] : nieuw)
+  }
+
   const totaal = blokken.reduce((n, b) => n + (b.meters || 0), 0)
   const fouten: string[] = []
   if (!titel.trim()) fouten.push('Geef de training een titel.')
   if (!moment) fouten.push('Kies een trainingsmoment.')
+  if (!groepen.length) fouten.push('Kies de groep: hele groep, een of meer groepen, of op inschrijving.')
+  if (anders && !andersTekst.trim()) fouten.push('Vul in wat de andere focus is, of zet "Anders" uit.')
   if (modus === 'samenstellen' && !blokken.some((b) => b.omschrijving.trim() && b.meters > 0))
     fouten.push('Voeg minstens één onderdeel met omschrijving en meters toe.')
   if (modus === 'uploaden' && !bestand) fouten.push('Kies een bestand om te uploaden.')
@@ -517,10 +540,11 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
         const id = voegTrainingToe({
           datum,
           sessieId,
-          groepId,
+          groepId: groepen[0],
+          groepen,
           trainerId,
           titel: titel.trim(),
-          focus,
+          focus: anders ? [...focus, andersTekst.trim()] : focus,
           notities: notities.trim(),
           blokken:
             modus === 'samenstellen'
@@ -545,10 +569,24 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
           <Input
             id="n-titel"
             value={titel}
-            onChange={(e) => setTitel(e.target.value)}
-            placeholder="Bijv. Keerpunten & onderwaterfase"
+            onChange={(e) => setEigenTitel(e.target.value)}
+            maxLength={200}
             aria-invalid={poging && !titel.trim()}
+            aria-describedby="n-titel-hulp"
           />
+          <p id="n-titel-hulp" className="text-xs text-muted-foreground">
+            {eigenTitel === null ? (
+              'Volgt het gekozen moment. Typ gerust een eigen titel, bijv. "Keerpunten & onderwaterfase".'
+            ) : (
+              <button
+                type="button"
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+                onClick={() => setEigenTitel(null)}
+              >
+                Terug naar de standaardtitel
+              </button>
+            )}
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-moment">Trainingsmoment</Label>
@@ -566,21 +604,6 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="n-groep">Groep</Label>
-          <Select value={groepId} onValueChange={setGroepId}>
-            <SelectTrigger id="n-groep" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GROEPEN.map((g) => (
-                <SelectItem key={g.id} value={g.id}>
-                  {g.naam} · {g.banen}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="n-trainer">Gegeven door</Label>
           <Select value={trainerId} onValueChange={setTrainerId}>
             <SelectTrigger id="n-trainer" className="w-full">
@@ -596,6 +619,23 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
           </Select>
         </div>
       </div>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Groep</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: HELE_GROEP, naam: 'Hele groep', hint: '' },
+            ...GROEPEN.map((g) => ({ id: g.id, naam: g.naam, hint: g.banen })),
+            { id: OP_INSCHRIJVING, naam: 'Op inschrijving', hint: 'bijv. workshop' },
+          ].map((g) => (
+            <KeuzeChip key={g.id} aan={groepen.includes(g.id)} onClick={() => kiesGroep(g.id)}>
+              {g.naam}
+              {g.hint && <span className="font-normal opacity-75"> · {g.hint}</span>}
+            </KeuzeChip>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Kies de hele groep, een of meer groepen samen, of op inschrijving.</p>
+      </fieldset>
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Focus</legend>
@@ -617,7 +657,21 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
               </button>
             )
           })}
+          <KeuzeChip aan={anders} onClick={() => setAnders(!anders)}>
+            Anders…
+          </KeuzeChip>
         </div>
+        {anders && (
+          <Input
+            value={andersTekst}
+            onChange={(e) => setAndersTekst(e.target.value)}
+            maxLength={40}
+            placeholder="Bijv. Onderwaterfase"
+            aria-label="Andere focus"
+            aria-invalid={poging && !andersTekst.trim()}
+            autoFocus={!basisAnders}
+          />
+        )}
       </fieldset>
 
       <Tabs value={modus} onValueChange={(v) => setModus(v as typeof modus)}>
@@ -743,5 +797,21 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+function KeuzeChip({ aan, onClick, children }: { aan: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={aan}
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-3 py-1 text-xs font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none',
+        aan ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-accent',
+      )}
+    >
+      {children}
+    </button>
   )
 }

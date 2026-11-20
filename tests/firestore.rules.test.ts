@@ -1,3 +1,4 @@
+// Fix: fix-29 — trainingen met groepen[]
 // Fix: fix-28 — demo-account: alleen de demo_*-kopie lezen
 // Fix: fix-27 — demo-account: alleen lezen (en feedback sturen)
 // Fix: fix-15 — regels voor ritmeWeken
@@ -294,6 +295,17 @@ describe('rooster, trainingen en jaarplan', () => {
     notities: '',
     aangemaaktDoor: door,
     aangemaaktOp: serverTimestamp(),
+  })
+
+  it('training met groepen: hele groep, combinatie of op inschrijving; geen onzin', async () => {
+    const met = (groepen: unknown, groepId = 'g-hele') => ({ ...training(TRAINER.uid), groepId, groepen })
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'trainingen', 'g1'), met(['g-hele'])))
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'trainingen', 'g2'), met(['g-basis', 'g-wedstrijd'], 'g-basis')))
+    await assertSucceeds(setDoc(doc(als(TRAINER), 'trainingen', 'g3'), met(['g-inschrijving'], 'g-inschrijving')))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 'g4'), met([])))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 'g5'), met(['g-zwemles'], 'g-zwemles')))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 'g6'), met(['g-basis'], 'g-wedstrijd')))
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 'g7'), met('g-hele')))
   })
 
   it('trainer kan een training vastleggen en de eigen training verwijderen', async () => {

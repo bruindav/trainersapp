@@ -1,3 +1,4 @@
+// Fix: fix-29 — training met groepen
 // Fix: fix-21 — trainingsopbouw, seizoensoverzicht, wedstrijden
 // Fix: fix-20 — help, privacy, disclaimer
 // Fix: fix-16 — feedbackpagina
@@ -60,6 +61,7 @@ const DATA: AppData = {
       datum: '2026-11-17',
       sessieId: 's-di',
       groepId: 'g-basis',
+      groepen: ['g-basis'],
       trainerId: 'verwijderd',
       titel: 'Lange armen',
       focus: ['Techniek'],
@@ -145,5 +147,41 @@ describe('Mijn rooster', () => {
     expect(screen.getByRole('button', { name: 'Ik kan niet' })).toBeInTheDocument()
     expect(screen.getByText('Recente wijzigingen')).toBeInTheDocument()
     expect(screen.getByText(/plek vrijgegeven/)).toBeInTheDocument()
+  })
+})
+
+// Fix: fix-29 — nieuwe training: standaardtitel, groepen en "Anders" bij focus
+describe('Nieuwe training', () => {
+  it('titel volgt het moment, groepen combineren tot hele groep, eigen focus', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/trainingen?nieuw=true'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    const titel = (await screen.findByLabelText('Titel')) as HTMLInputElement
+    expect(titel.value).toMatch(/^Training (dinsdag|donderdag|zondag) op \d+ \w+$/)
+
+    const knop = (naam: RegExp) => screen.getByRole('button', { name: naam })
+    expect(knop(/^Hele groep/)).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(knop(/^Basis/))
+    fireEvent.click(knop(/^Wedstrijd/))
+    expect(knop(/^Hele groep/)).toHaveAttribute('aria-pressed', 'false')
+    expect(knop(/^Basis/)).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(knop(/^Gevorderd/))
+    expect(knop(/^Hele groep/)).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(knop(/^Op inschrijving/))
+    expect(knop(/^Op inschrijving/)).toHaveAttribute('aria-pressed', 'true')
+    expect(knop(/^Hele groep/)).toHaveAttribute('aria-pressed', 'false')
+
+    expect(knop(/^Borstcrawl$/)).toBeInTheDocument()
+    expect(knop(/^Ademhaling$/)).toBeInTheDocument()
+    fireEvent.click(knop(/^Anders/))
+    expect(screen.getByLabelText('Andere focus')).toBeInTheDocument()
+
+    fireEvent.change(titel, { target: { value: 'Keerpunten' } })
+    expect(titel.value).toBe('Keerpunten')
+    fireEvent.click(screen.getByRole('button', { name: 'Terug naar de standaardtitel' }))
+    expect(titel.value).toMatch(/^Training /)
   })
 })

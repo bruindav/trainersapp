@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-29 — trainingen met meerdere groepen
  * Fix: fix-28 — demo-account leest uit de demo_*-collecties (geanonimiseerde kopie).
  * Fix: fix-27 — demo-trainer (staat niet in Firestore) aan de lijst toevoegen.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
@@ -256,6 +257,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
               datum: x.datum,
               sessieId: x.sessieId,
               groepId: x.groepId,
+              groepen: Array.isArray(x.groepen) && x.groepen.length ? x.groepen : [x.groepId],
               trainerId: x.trainerId,
               titel: x.titel ?? '',
               focus: x.focus ?? [],

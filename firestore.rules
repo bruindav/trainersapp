@@ -1,3 +1,4 @@
+// Fix: fix-29 — trainingen: groepen[] (hele groep, op inschrijving of een of meer groepen)
 // Fix: fix-28 — demo-account leest alleen de geanonimiseerde demo_*-collecties.
 // Fix: fix-27 — demo-account: overal lezen, niets wijzigen (behalve feedback sturen).
 // Fix: fix-21 — wedstrijden, taak wedstrijdBeheer, jaarplan met opbouwen en zones.
@@ -458,11 +459,18 @@ service cloud.firestore {
       allow read: if leest();
       allow create: if isTrainer()
         && request.resource.data.keys().hasOnly([
-             'datum', 'sessieId', 'groepId', 'trainerId', 'titel', 'focus', 'blokken',
+             'datum', 'sessieId', 'groepId', 'groepen', 'trainerId', 'titel', 'focus', 'blokken',
              'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp'])
         && isDatum(request.resource.data.datum)
         && tekst(request.resource.data.sessieId, 40) && request.resource.data.sessieId.size() > 0
         && tekst(request.resource.data.groepId, 40) && request.resource.data.groepId.size() > 0
+        && (!('groepen' in request.resource.data) || (
+             request.resource.data.groepen is list
+             && request.resource.data.groepen.size() >= 1
+             && request.resource.data.groepen.size() <= 3
+             && request.resource.data.groepen.hasOnly(
+                  ['g-hele', 'g-inschrijving', 'g-basis', 'g-gevorderd', 'g-wedstrijd'])
+             && request.resource.data.groepen[0] == request.resource.data.groepId))
         && request.resource.data.trainerId is string
         && exists(trainerPad(request.resource.data.trainerId))
         && tekst(request.resource.data.titel, 200)

@@ -1,3 +1,4 @@
+// Fix: fix-29 — groepen van een training
 // Fix: fix-21 — 'Jaarplan: nu' uit de trainingsopbouw (anders het seizoensoverzicht); volgende wedstrijd uit Wedstrijden
 // Fix: fix-11 — volgende training, open plekken en week-overzicht uit het gepubliceerde rooster
 // Fix: fix-5 — melding: beschikbaarheid invullen
@@ -23,9 +24,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { groepenLabel } from '@/data/fixtures'
 import { DAGEN, dagVan } from '@/data/rooster'
 import { faseOp, volgendeWedstrijd } from '@/data/jaarplan'
-import { groepById, huidigePeriode, totaalMeters, trainerById, useAppData } from '@/data/store'
+import { huidigePeriode, totaalMeters, trainerById, useAppData } from '@/data/store'
 import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, daysBetween, formatLong, formatShort, isoWeekNumber, startOfWeek, todayISO } from '@/lib/dates'
 
@@ -313,7 +315,7 @@ function Overzicht() {
                       <div className="min-w-0 text-xs text-muted-foreground">
                         <p className="font-semibold text-foreground">{trainer.naam}</p>
                         <p className="capitalize">
-                          {formatLong(t.datum)} · {groepById(t.groepId).naam}
+                          {formatLong(t.datum)} · {groepenLabel(t.groepen)}
                         </p>
                       </div>
                     </div>

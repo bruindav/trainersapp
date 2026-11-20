@@ -1,3 +1,4 @@
+// Fix: fix-29 — trainingen: meerdere groepen (of hele groep / op inschrijving), focus uitgebreid
 // Fix: fix-28 — demo-trainer heeft een vaste id en is een gewone trainer
 // Fix: fix-27 — demo-trainer (alleen kijken)
 // Fix: fix-21 — taak Wedstrijdcoördinator; jaarplan met opbouwen, zones en wedstrijden
@@ -169,28 +170,21 @@ export interface Afwezigheid {
   reden: string
 }
 
-export type Focus =
-  | 'Techniek'
-  | 'Uithouding'
-  | 'Snelheid'
-  | 'Keerpunten'
-  | 'Starts'
-  | 'Vlinderslag'
-  | 'Rugslag'
-  | 'Schoolslag'
-  | 'Wisselslag'
-  | 'Herstel'
+/** Een vaste focus uit ALLE_FOCUS, of een eigen omschrijving ("Anders…"). */
+export type Focus = string
 
 export const ALLE_FOCUS: Focus[] = [
   'Techniek',
-  'Uithouding',
-  'Snelheid',
-  'Keerpunten',
-  'Starts',
-  'Vlinderslag',
+  'Borstcrawl',
   'Rugslag',
   'Schoolslag',
+  'Vlinderslag',
   'Wisselslag',
+  'Ademhaling',
+  'Keerpunten',
+  'Starts',
+  'Uithouding',
+  'Snelheid',
   'Herstel',
 ]
 
@@ -213,7 +207,10 @@ export interface Training {
   id: string
   datum: string
   sessieId: string
+  /** Eerste groep uit `groepen` (voor oudere versies van de app). */
   groepId: string
+  /** Hele groep, op inschrijving, of een of meer van de GROEPEN (fix-29). */
+  groepen: string[]
   trainerId: string
   titel: string
   focus: Focus[]
@@ -357,6 +354,31 @@ export const GROEPEN: Groep[] = [
   { id: 'g-gevorderd', naam: 'Gevorderd', banen: 'Baan 3–4', omschrijving: 'Alle slagen, hogere omvang' },
   { id: 'g-wedstrijd', naam: 'Wedstrijd', banen: 'Baan 5–6', omschrijving: 'Wedstrijdgerichte sets' },
 ]
+
+/** Groepkeuzes bij een training (fix-29), naast de losse GROEPEN. */
+export const HELE_GROEP = 'g-hele'
+export const OP_INSCHRIJVING = 'g-inschrijving'
+
+/** Leesbare naam voor de groepen van een training, bv. "Basis + Gevorderd". */
+export function groepenLabel(groepen: string[]): string {
+  if (groepen.includes(HELE_GROEP)) return 'Hele groep'
+  if (groepen.includes(OP_INSCHRIJVING)) return 'Op inschrijving'
+  const namen = GROEPEN.filter((g) => groepen.includes(g.id)).map((g) => g.naam)
+  if (namen.length === GROEPEN.length) return 'Hele groep'
+  return namen.join(' + ') || 'Onbekende groep'
+}
+
+/** Hoort een training bij groep `groepId` (voor het filter)? Hele groep telt voor iedereen. */
+export function trainingVoorGroep(groepen: string[], groepId: string) {
+  return groepen.includes(groepId) || groepen.includes(HELE_GROEP)
+}
+
+/** Standaardtitel van een training, bv. "Training zondag op 22 november". */
+export function standaardTitel(dag: string, datum: string) {
+  const [j, m, d] = datum.split('-').map(Number)
+  const datumTekst = new Date(j, m - 1, d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })
+  return `Training ${dag.toLowerCase()} op ${datumTekst}`
+}
 
 // ---------------------------------------------------------------------------
 // Rooster — een vaste rotatie, aangevuld met handmatige wijzigingen.
