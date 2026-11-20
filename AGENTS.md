@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-32 — bijlagen bewaren, trainingsschema-pdf inlezen -->
 <!-- Fix: fix-31 — gever mag ook wijzigen/verwijderen -->
 <!-- Fix: fix-30 — eigen training wijzigen/verwijderen -->
 <!-- Fix: fix-29 — trainingen: groepen[], standaardtitel, focus -->
@@ -120,6 +121,7 @@ This document describes the project for developers and AI agents working on this
 | `roosterWijzigingen/{week\|sessie\|groep}` | trainerId or null (open slot) | any trainer |
 | `afwezigheden/{id}` | trainerId, van, tot, reden | own or coordinator |
 | `trainingen/{id}` | datum, sessieId, groepId (= groepen[0], for old clients), groepen[] (`g-hele` / `g-inschrijving` alone, or 1–2 of the GROEPEN; three together become `g-hele`), trainerId, titel, focus[] (ALLE_FOCUS or one free text ≤40), blokken, notities, bijlage?, aangemaaktDoor, aangemaaktOp, gewijzigdOp? | create: any trainer (as self); update: `aangemaaktDoor` or `trainerId` (sets `gewijzigdOp`, can't change maker/created); delete: `aangemaaktDoor`, `trainerId` or coordinator |
+| `bijlagen/{trainingId}` | naam, type, data (data-URL ≤ 1,000,000 chars), door, op — the file of a training | create/update: whoever added or gave the training (checked with getAfter, so it can be written in one batch with the training); delete: same or coordinator; read: trainers |
 | `feedback/{id}` | tekst, pagina (path), breedte, screenshot (JPEG data-URL ≤ 900 KB, visible part of the screen), door, naam, op, status nieuw/afgehandeld | create: any trainer as self; read/status/delete: coordinator only |
 | `jaarplan/huidig` | seizoen, van, tot, status, versie, periodes[] + evenementen[] (seizoensoverzicht; evenementen of type Reces = no training), zones[] {id,naam,kleur,percentage,omschrijving}, opbouwen[] {id,naam,inleiding(html),doelWedstrijdId,aandachtsgebieden[{id,titel,tekst(html)}],fases[{id,naam,van,tot,kleur,doel,zones[],zonesToelichting,techniek,letOp,sets[]}]} | coordinator or jaarplanBeheer |
 | `wedstrijden/{id}` | naam, datum, einddatum?, plaats, baan ''/'25'/'50', inschrijvenVoor?, onderVoorbehoud, doel, notitie | coordinator, jaarplanBeheer or wedstrijdBeheer; all trainers read |
@@ -222,7 +224,7 @@ pnpm preview       # Preview the production build
 - **Demodata** (fix-28): `scripts/maak-demo-data.ts` (workflow `demo-data.yml`: Mondays 02:17 UTC, manual, and on changes to the script) copies all collections except `uitnodigingen`, `feedback` and `config` into `demo_*`, anonymised by `src/data/demo-anonimiseer.ts`: trainer ids → `demo-tNN`, names (full and per part, also inside texts) → invented names, supervisors → "Badmeester …", e-mail addresses removed, absence reasons → "Afwezig". One ordinary trainer with the most turns becomes "Demo Trainer" (no tasks) so the demo has its own roster. Jaarplan and training contents are copied as-is (not personal).
 - **Trainingen** (fix-29): the title defaults to "Training [dag] op [datum]" (`standaardTitel`) and follows the chosen moment until the trainer types their own. Old docs without `groepen` are read as `[groepId]`. The group filter shows a "Hele groep" training under every group. Whoever added or gave a training sees Wijzigen/Verwijderen (fix-31; the coordinator also sees Verwijderen) (`?bewerk=id` opens the same form); delete asks for a second click (fix-30).
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
-- **Uploads** only keep the file name for now; storing files is milestone 4.
+- **Uploads** (fix-32): Cloud Storage needs the paid Blaze plan, so the file itself is stored in Firestore `bijlagen/{trainingId}` as a data-URL (photos are shrunk to JPEG; other files max ~690 kB). `Openen` downloads it; trainings from before fix-32 only have the name. A PDF made with the training-chat template ("Training <dag> <d> <maand> <jjjj>", table Onderdeel/Afstand/Tijd/Invulling, Totaal, Aanpassen per baan, Aandachtspunten) is read with pdf.js (`src/lib/pdf-tekst.ts`, lazy-loaded legacy build) and parsed by `src/lib/training-schema.ts` into blokken, notities, focus and the moment; the PDF is kept as attachment. Bijlagen are not copied to the demo data.
 
 ## Application Name
 

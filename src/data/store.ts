@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-32 — bijlage (het bestand zelf) bij een training bewaren
  * Fix: fix-30 — eigen training wijzigen
  * Fix: fix-29 — trainingen met meerdere groepen
  * Fix: fix-28 — demo-account leest uit de demo_*-collecties (geanonimiseerde kopie).
@@ -78,6 +79,7 @@ import { volledig, type Indeling, type IndelingMap } from './indeling'
 import { normaliseerJaarplan, zonderUndefined } from './jaarplan'
 import type { LogRegel, LogSoort, Ruilverzoek } from './wijzigingen'
 
+import type { BijlageData } from '@/lib/bijlage'
 import { DEMO_PREFIX } from './demo-anonimiseer'
 
 /** Pad van het (ene) jaarplan-document. */
@@ -597,28 +599,53 @@ export function herstelRotatie(weekStart: string) {
 
 export type TrainingVelden = Omit<Training, 'id' | 'aangemaaktDoor'>
 
-export function voegTrainingToe(training: TrainingVelden) {
+/** Een bestand bij een training (fix-32), bewaard in bijlagen/{trainingId}. */
+function zetBijlage(batch: ReturnType<typeof writeBatch>, trainingId: string, bijlage: BijlageData) {
+  batch.set(doc(getDb(), 'bijlagen', trainingId), {
+    naam: bijlage.naam,
+    type: bijlage.type,
+    data: bijlage.data,
+    door: state.huidigeTrainerId,
+    op: serverTimestamp(),
+  })
+}
+
+/** Legt een training vast, eventueel met het bestand zelf (fix-32). */
+export function voegTrainingToe(training: TrainingVelden, bijlage?: BijlageData) {
   const ref = doc(collection(getDb(), 'trainingen'))
-  setDoc(ref, {
+  const batch = writeBatch(getDb())
+  batch.set(ref, {
     ...training,
     aangemaaktDoor: state.huidigeTrainerId,
     aangemaaktOp: serverTimestamp(),
-  }).catch(meldFout('Training opslaan'))
+  })
+  if (bijlage) zetBijlage(batch, ref.id, bijlage)
+  batch.commit().catch(meldFout('Training opslaan'))
   return ref.id
 }
 
-/** Wijzigt een eigen training; de regels staan dit alleen toe aan wie hem toevoegde. */
-export function werkTrainingBij(id: string, training: TrainingVelden) {
-  updateDoc(doc(getDb(), 'trainingen', id), {
+/**
+ * Wijzigt een training; de regels staan dit alleen toe aan wie hem toevoegde of gaf.
+ * `bijlage`: een nieuw bestand, of null als de bijlage weg moet.
+ */
+export function werkTrainingBij(id: string, training: TrainingVelden, bijlage?: BijlageData | null) {
+  const batch = writeBatch(getDb())
+  batch.update(doc(getDb(), 'trainingen', id), {
     ...training,
     // Een weggehaalde bijlage moet ook echt uit het document.
     bijlage: training.bijlage ?? deleteField(),
     gewijzigdOp: serverTimestamp(),
-  }).catch(meldFout('Training wijzigen'))
+  })
+  if (bijlage) zetBijlage(batch, id, bijlage)
+  else if (bijlage === null) batch.delete(doc(getDb(), 'bijlagen', id))
+  batch.commit().catch(meldFout('Training wijzigen'))
 }
 
 export function verwijderTraining(id: string) {
-  deleteDoc(doc(getDb(), 'trainingen', id)).catch(meldFout('Training verwijderen'))
+  const batch = writeBatch(getDb())
+  batch.delete(doc(getDb(), 'bijlagen', id))
+  batch.delete(doc(getDb(), 'trainingen', id))
+  batch.commit().catch(meldFout('Training verwijderen'))
 }
 
 export function werkPeriodeBij(periode: Periode) {

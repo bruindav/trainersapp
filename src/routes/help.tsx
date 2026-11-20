@@ -1,3 +1,4 @@
+// Fix: fix-32 — help: bijlagen en trainingsschema inlezen
 // Fix: fix-28 — help: demo met verzonnen namen
 // Fix: fix-27 — help: demo-account
 // Fix: fix-24 — help: bewerken aanzetten
@@ -128,6 +129,18 @@ function HelpPagina() {
           Onder <strong>Trainingen</strong> leg je vast wat je hebt getraind: onderdelen, meters en aandachtspunten. Zo
           zien collega's wat er in het water is gedaan. Een eerdere training kun je als basis voor een nieuwe gebruiken.
         </p>
+        <ul>
+          <li>
+            Upload je een pdf of foto, dan bewaart de app het bestand; collega's openen het met <strong>Openen</strong>.
+            Foto's worden verkleind, andere bestanden mogen maximaal ongeveer 700 kB zijn.
+          </li>
+          <li>
+            Een trainingsschema-pdf zoals die uit de trainingschats (titel "Training zondag 15 november 2026" met de tabel
+            Onderdeel, Afstand, Tijd, Invulling) wordt meteen ingelezen: onderdelen, meters, notities, focus en moment staan
+            dan al ingevuld.
+          </li>
+          <li>Een training die jij toevoegde of gaf, kun je wijzigen en verwijderen.</li>
+        </ul>
       </section>
 
       <section id="jaarplan" className="scroll-mt-24">

@@ -1,3 +1,4 @@
+// Fix: fix-32 — bijlage echt bewaren en openen; trainingsschema-pdf inlezen in de velden
 // Fix: fix-31 — ook wie de training gaf mag wijzigen/verwijderen; coördinator verwijdert
 // Fix: fix-30 — eigen training wijzigen en (met bevestiging) verwijderen
 // Fix: fix-29 — standaardtitel, meerdere groepen, focus Borstcrawl/Ademhaling/Anders
@@ -9,6 +10,7 @@ import {
   ClipboardPlus,
   Copy,
   FileUp,
+  Loader2,
   Paperclip,
   Pencil,
   Plus,
@@ -60,6 +62,7 @@ import {
 import { DAGEN, dagVan } from '@/data/rooster'
 import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, formatLong, formatShort, startOfWeek, todayISO } from '@/lib/dates'
+import { MAX_BESTAND_KB, maakBijlage, openBijlage, type BijlageData } from '@/lib/bijlage'
 import { cn } from '@/lib/utils'
 
 interface Zoek {
@@ -447,12 +450,7 @@ function TrainingDetail({
                 </ol>
               )}
 
-              {t.bijlage && (
-                <div className="flex items-center gap-3 rounded-lg border border-dashed p-3 text-sm">
-                  <Paperclip className="size-4 text-primary" aria-hidden />
-                  <span className="truncate font-medium">{t.bijlage}</span>
-                </div>
-              )}
+              {t.bijlage && <BijlageOpenen trainingId={t.id} naam={t.bijlage} />}
 
               {t.notities && (
                 <div>
@@ -526,10 +524,13 @@ function NieuweTraining({
     .reverse()
   // Bij wijzigen staat het eigen moment van de training er altijd in, ook als het ouder is.
   const eigenSessie = bewerk ? SESSIES.find((s) => s.id === bewerk.sessieId) : undefined
-  const momenten =
-    bewerk && eigenSessie && !recent.some((m) => m.datum === bewerk.datum && m.sessie.id === bewerk.sessieId)
-      ? [{ sessie: eigenSessie, datum: bewerk.datum }, ...recent]
-      : recent
+  // Een moment uit een ingelezen trainingsschema (fix-32) kan ook ouder zijn.
+  const [extraMoment, setExtraMoment] = useState<{ sessie: (typeof SESSIES)[number]; datum: string } | null>(null)
+  const extra = [
+    ...(bewerk && eigenSessie ? [{ sessie: eigenSessie, datum: bewerk.datum }] : []),
+    ...(extraMoment ? [extraMoment] : []),
+  ].filter((m, i, lijst) => lijst.findIndex((x) => x.datum === m.datum && x.sessie.id === m.sessie.id) === i)
+  const momenten = [...extra.filter((m) => !recent.some((r) => r.datum === m.datum && r.sessie.id === m.sessie.id)), ...recent]
 
   // Het laatste moment waarop ik volgens het gepubliceerde rooster training gaf.
   const mijnGeroosterd = gepubliceerdeTrainingen(data).filter((g) => staatIngeroosterd(g, data.huidigeTrainerId))
@@ -559,8 +560,50 @@ function NieuweTraining({
   )
   const [notities, setNotities] = useState(bewerk?.notities ?? '')
   const [bestand, setBestand] = useState<File | null>(null)
+  // Bij wijzigen: de al bewaarde bijlage weghalen.
+  const [bijlageWeg, setBijlageWeg] = useState(false)
+  const [bijlageFout, setBijlageFout] = useState('')
+  const [inlezen, setInlezen] = useState(false)
+  const [overgenomen, setOvergenomen] = useState(false)
+  const [bezig, setBezig] = useState(false)
   const [uploadMeters, setUploadMeters] = useState('')
   const [poging, setPoging] = useState(false)
+  const bestaandeBijlage = bewerk?.bijlage && !bijlageWeg ? bewerk.bijlage : null
+  const bijlageNaam = bestand?.name ?? bestaandeBijlage
+
+  /** Nieuw bestand gekozen: bewaren als bijlage, en een trainingsschema-pdf meteen inlezen. */
+  async function kiesBestand(f: File | null) {
+    setBestand(f)
+    setBijlageFout('')
+    setOvergenomen(false)
+    if (!f || !(f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) return
+    setInlezen(true)
+    try {
+      const [{ leesPdfTekst }, { leesTrainingSchema }] = await Promise.all([
+        import('@/lib/pdf-tekst'),
+        import('@/lib/training-schema'),
+      ])
+      const schema = leesTrainingSchema(await leesPdfTekst(f))
+      if (!schema) return
+      setBlokken(schema.blokken)
+      setNotities(schema.notities)
+      setFocus(schema.focus)
+      setAnders(false)
+      setAndersTekst('')
+      setEigenTitel(null)
+      const s = SESSIES.find((x) => x.dag.toLowerCase() === schema.dag)
+      if (s) {
+        setExtraMoment({ sessie: s, datum: schema.datum })
+        setMoment(`${schema.datum}|${s.id}`)
+      }
+      setModus('samenstellen')
+      setOvergenomen(true)
+    } catch {
+      // Geen leesbare pdf: dan wordt hij alleen als bijlage bewaard.
+    } finally {
+      setInlezen(false)
+    }
+  }
 
   const [momentDatum, momentSessie] = moment.split('|')
   const sessie = SESSIES.find((s) => s.id === momentSessie)
@@ -582,7 +625,7 @@ function NieuweTraining({
   if (anders && !andersTekst.trim()) fouten.push('Vul in wat de andere focus is, of zet "Anders" uit.')
   if (modus === 'samenstellen' && !blokken.some((b) => b.omschrijving.trim() && b.meters > 0))
     fouten.push('Voeg minstens één onderdeel met omschrijving en meters toe.')
-  if (modus === 'uploaden' && !bestand && !bewerk?.bijlage) fouten.push('Kies een bestand om te uploaden.')
+  if (modus === 'uploaden' && !bijlageNaam) fouten.push('Kies een bestand om te uploaden.')
 
   const updateBlok = (i: number, patch: Partial<TrainingBlok>) =>
     setBlokken(blokken.map((b, j) => (j === i ? { ...b, ...patch } : b)))
@@ -591,10 +634,19 @@ function NieuweTraining({
     <form
       className="space-y-5"
       noValidate
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault()
         setPoging(true)
-        if (fouten.length) return
+        if (fouten.length || bezig || inlezen) return
+        // Het bestand zelf bewaren (fix-32); te groot = melding, niets opgeslagen.
+        let bijlage: BijlageData | undefined
+        if (bestand) {
+          setBezig(true)
+          const uitkomst = await maakBijlage(bestand).catch(() => ({ fout: 'Het bestand kon niet gelezen worden.' }))
+          setBezig(false)
+          if ('fout' in uitkomst) return setBijlageFout(uitkomst.fout)
+          bijlage = uitkomst
+        }
         const [datum, sessieId] = moment.split('|')
         const meters = Number(uploadMeters)
         const velden: TrainingVelden = {
@@ -612,14 +664,14 @@ function NieuweTraining({
               : meters > 0
                 ? [{ onderdeel: 'Kern', omschrijving: 'Zie bijlage', meters }]
                 : [],
-          bijlage: modus === 'uploaden' ? (bestand?.name ?? bewerk?.bijlage) : undefined,
+          bijlage: bijlage?.naam ?? bestaandeBijlage ?? undefined,
         }
         if (bewerk) {
-          werkTrainingBij(bewerk.id, velden)
+          werkTrainingBij(bewerk.id, velden, bijlage ?? (bewerk.bijlage && bijlageWeg ? null : undefined))
           toast.success('Training gewijzigd')
           return onKlaar(bewerk.id)
         }
-        const id = voegTrainingToe(velden)
+        const id = voegTrainingToe(velden, bijlage)
         toast.success('Training vastgelegd', { description: 'Je collega’s zien hem nu in het logboek.' })
         onKlaar(id)
       }}
@@ -757,6 +809,12 @@ function NieuweTraining({
         </TabsList>
 
         <TabsContent value="samenstellen" className="mt-4 space-y-3">
+          {overgenomen && (
+            <p role="status" className="rounded-lg bg-accent/60 p-3 text-sm">
+              <strong>Overgenomen uit het trainingsschema.</strong> Onderdelen, notities, focus en moment zijn ingevuld;
+              controleer ze even. De pdf wordt als bijlage bewaard.
+            </p>
+          )}
           {blokken.map((b, i) => (
             <div key={i} className="grid grid-cols-[7.5rem_1fr_5.5rem_auto] items-center gap-2">
               <Select value={b.onderdeel} onValueChange={(v) => updateBlok(i, { onderdeel: v as TrainingBlok['onderdeel'] })}>
@@ -817,25 +875,35 @@ function NieuweTraining({
             htmlFor="n-bestand"
             className={cn(
               'flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors hover:border-primary hover:bg-accent/40',
-              bestand && 'border-primary bg-accent/40',
-              poging && modus === 'uploaden' && !bestand && 'border-destructive',
+              bijlageNaam && 'border-primary bg-accent/40',
+              poging && modus === 'uploaden' && !bijlageNaam && 'border-destructive',
             )}
           >
             <FileUp className="size-8 text-primary" aria-hidden />
-            <span className="font-bold">
-              {bestand ? bestand.name : (bewerk?.bijlage ?? 'Kies een pdf, foto of Word-bestand')}
+            <span className="font-bold">{bijlageNaam ?? 'Kies een pdf, foto of Word-bestand'}</span>
+            <span className="text-xs text-muted-foreground">
+              {bestand
+                ? `${Math.max(1, Math.round(bestand.size / 1024))} kB · klik om te vervangen`
+                : bijlageNaam
+                  ? 'Klik om te vervangen'
+                  : `Bijvoorbeeld een foto van je trainingsbriefje (max. ${MAX_BESTAND_KB} kB; foto's worden verkleind)`}
             </span>
             <span className="text-xs text-muted-foreground">
-              {bestand ? `${Math.max(1, Math.round(bestand.size / 1024))} kB · klik om te vervangen` : 'Bijvoorbeeld een foto van je trainingsbriefje'}
+              Een trainingsschema-pdf uit de trainingschats wordt meteen ingelezen.
             </span>
             <input
               id="n-bestand"
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
               className="sr-only"
-              onChange={(e) => setBestand(e.target.files?.[0] ?? null)}
+              onChange={(e) => kiesBestand(e.target.files?.[0] ?? null)}
             />
           </label>
+          {inlezen && (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden /> Trainingsschema inlezen…
+            </p>
+          )}
           <div className="max-w-48 space-y-2">
             <Label htmlFor="n-um">Totaal aantal meters (optioneel)</Label>
             <Input id="n-um" type="number" min={0} step={50} value={uploadMeters} onChange={(e) => setUploadMeters(e.target.value)} />
@@ -843,11 +911,35 @@ function NieuweTraining({
         </TabsContent>
       </Tabs>
 
+      {bijlageNaam && (
+        <div className="flex items-center gap-3 rounded-lg border border-dashed p-3 text-sm">
+          <Paperclip className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-medium">Bijlage: {bijlageNaam}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setBestand(null)
+              setBijlageFout('')
+              if (!bestand && bewerk?.bijlage) setBijlageWeg(true)
+            }}
+          >
+            <X /> Weghalen
+          </Button>
+        </div>
+      )}
+      {bijlageFout && (
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-medium text-destructive">
+          {bijlageFout}
+        </p>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="n-notities">Notities voor collega's</Label>
         <Textarea
           id="n-notities"
-          rows={3}
+          rows={notities.length > 300 ? 8 : 3}
           value={notities}
           onChange={(e) => setNotities(e.target.value)}
           placeholder="Wat ging goed, waar moet de volgende trainer op letten?"
@@ -866,8 +958,9 @@ function NieuweTraining({
         <Button type="button" variant="outline" onClick={() => onKlaar()}>
           Annuleren
         </Button>
-        <Button type="submit">
-          <ClipboardPlus /> {bewerk ? 'Wijzigingen opslaan' : 'Training opslaan'}
+        <Button type="submit" disabled={bezig || inlezen}>
+          {bezig ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <ClipboardPlus />}{' '}
+          {bewerk ? 'Wijzigingen opslaan' : 'Training opslaan'}
         </Button>
       </DialogFooter>
     </form>
@@ -887,5 +980,38 @@ function KeuzeChip({ aan, onClick, children }: { aan: boolean; onClick: () => vo
     >
       {children}
     </button>
+  )
+}
+
+/** Opent (downloadt) het bewaarde bestand bij een training (fix-32). */
+function BijlageOpenen({ trainingId, naam }: { trainingId: string; naam: string }) {
+  const [bezig, setBezig] = useState(false)
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-dashed p-3 text-sm">
+      <Paperclip className="size-4 shrink-0 text-primary" aria-hidden />
+      <span className="min-w-0 flex-1 truncate font-medium">{naam}</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={bezig}
+        onClick={async () => {
+          setBezig(true)
+          try {
+            const gelukt = await openBijlage(trainingId)
+            if (!gelukt)
+              toast('Dit bestand is niet bewaard', {
+                description: 'Het is toegevoegd voordat de app bestanden kon opslaan. Upload het opnieuw via Wijzigen.',
+              })
+          } catch {
+            toast.error('Het bestand kon niet worden geopend. Controleer je verbinding.')
+          } finally {
+            setBezig(false)
+          }
+        }}
+      >
+        {bezig ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden /> : <FileUp />} Openen
+      </Button>
+    </div>
   )
 }

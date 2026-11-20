@@ -205,3 +205,32 @@ describe('Training wijzigen', () => {
     expect(screen.getByRole('button', { name: /Wijzigingen opslaan/ })).toBeInTheDocument()
   })
 })
+
+// Fix: fix-32 — trainingsschema-pdf uploaden vult de velden
+vi.mock('@/lib/pdf-tekst', async () => ({
+  leesPdfTekst: async () => (await import('../../tests/fixtures/training-15-november.tekst.json')).default,
+}))
+
+describe('Trainingsschema uploaden', () => {
+  it('neemt onderdelen, notities en focus over uit de pdf', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const userEvent = (await import('@testing-library/user-event')).default
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/trainingen?nieuw=true'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    await userEvent.click(await screen.findByRole('tab', { name: /Bestand uploaden/ }))
+    const pdf = new File(['%PDF'], 'training-15-november.pdf', { type: 'application/pdf' })
+    await act(async () => {
+      fireEvent.change(document.getElementById('n-bestand')!, { target: { files: [pdf] } })
+    })
+    expect(await screen.findByText(/Overgenomen uit het trainingsschema/)).toBeInTheDocument()
+    expect(screen.getAllByLabelText(/^Omschrijving onderdeel/)).toHaveLength(7)
+    expect(screen.getByText('1.675 m')).toBeInTheDocument()
+    expect((screen.getByLabelText(/Notities/) as HTMLTextAreaElement).value).toMatch(/Aandachtspunten/)
+    expect(screen.getByRole('button', { name: /^Wisselslag$/ })).toHaveAttribute('aria-pressed', 'true')
+    expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Training zondag op 15 november')
+    expect(screen.getByText(/Bijlage: training-15-november\.pdf/)).toBeInTheDocument()
+  })
+})

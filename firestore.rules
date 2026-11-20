@@ -1,3 +1,4 @@
+// Fix: fix-32 — bijlagen: het bestand bij een training
 // Fix: fix-31 — trainingen: ook wie de training gaf mag wijzigen en verwijderen
 // Fix: fix-30 — trainingen: eigen training wijzigen en verwijderen
 // Fix: fix-29 — trainingen: groepen[] (hele groep, op inschrijving of een of meer groepen)
@@ -497,6 +498,32 @@ service cloud.firestore {
       allow delete: if isTrainer() && (
         resource.data.aangemaaktDoor == request.auth.uid
         || resource.data.trainerId == request.auth.uid
+        || isCoordinator()
+      );
+    }
+
+    // --- Bijlagen (fix-32) ----------------------------------------------------
+    // Het bestand bij training {id} (data-URL, max. ~1 MB). Schrijven mag wie de
+    // training toevoegde of gaf, samen met of na de training; verwijderen ook de coördinator.
+    function trainingPad(id) { return /databases/$(database)/documents/trainingen/$(id); }
+    match /bijlagen/{id} {
+      allow read: if leest();
+      allow create, update: if isTrainer()
+        && existsAfter(trainingPad(id))
+        && (getAfter(trainingPad(id)).data.aangemaaktDoor == request.auth.uid
+            || getAfter(trainingPad(id)).data.trainerId == request.auth.uid)
+        && request.resource.data.keys().hasOnly(['naam', 'type', 'data', 'door', 'op'])
+        && request.resource.data.keys().hasAll(['naam', 'type', 'data', 'door', 'op'])
+        && tekst(request.resource.data.naam, 255) && request.resource.data.naam.size() > 0
+        && tekst(request.resource.data.type, 100)
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 1000000
+        && request.resource.data.door == request.auth.uid
+        && request.resource.data.op == request.time;
+      allow delete: if isTrainer() && (
+        !exists(trainingPad(id))
+        || get(trainingPad(id)).data.aangemaaktDoor == request.auth.uid
+        || get(trainingPad(id)).data.trainerId == request.auth.uid
         || isCoordinator()
       );
     }

@@ -1,3 +1,4 @@
+// Fix: fix-32 — bijlagen bij trainingen
 // Fix: fix-31 — ook de gever mag wijzigen en verwijderen
 // Fix: fix-30 — training wijzigen en verwijderen door wie hem toevoegde
 // Fix: fix-29 — trainingen met groepen[]
@@ -349,6 +350,38 @@ describe('rooster, trainingen en jaarplan', () => {
     // Wie hem gaf mag verwijderen.
     await assertSucceeds(deleteDoc(doc(als(TRAINER), 'trainingen', 't3')))
   })
+  it('bijlage: samen met de eigen training opslaan; niet bij andermans training; delen met trainers', async () => {
+    const bijlage = (uid: string, data = 'data:application/pdf;base64,JVBERi0=') => ({
+      naam: 'training.pdf',
+      type: 'application/pdf',
+      data,
+      door: uid,
+      op: serverTimestamp(),
+    })
+    const batch = writeBatch(als(TRAINER))
+    batch.set(doc(als(TRAINER), 'trainingen', 'b1'), training(TRAINER.uid))
+    batch.set(doc(als(TRAINER), 'bijlagen', 'b1'), bijlage(TRAINER.uid))
+    await assertSucceeds(batch.commit())
+    await assertSucceeds(getDoc(doc(als(HOOFD), 'bijlagen', 'b1')))
+    // Zonder training, bij andermans training, namens een ander of te groot: nee.
+    await assertFails(setDoc(doc(als(TRAINER), 'bijlagen', 'geen'), bijlage(TRAINER.uid)))
+    await seed(async (db) =>
+      setDoc(doc(db, 'trainingen', 'b2'), { ...training(HOOFD.uid), trainerId: HOOFD.uid, aangemaaktOp: null }),
+    )
+    await assertFails(setDoc(doc(als(TRAINER), 'bijlagen', 'b2'), bijlage(TRAINER.uid)))
+    await assertFails(setDoc(doc(als(TRAINER), 'bijlagen', 'b1'), bijlage(HOOFD.uid)))
+    await assertFails(setDoc(doc(als(TRAINER), 'bijlagen', 'b1'), bijlage(TRAINER.uid, 'x'.repeat(1000001))))
+    await assertFails(setDoc(doc(als(TRAINER), 'bijlagen', 'b1'), { ...bijlage(TRAINER.uid), extra: 1 }))
+    // Verwijderen: niet door een ander, wel door de maker (samen met de training) of de coördinator.
+    await seed(async (db) => setDoc(doc(db, 'bijlagen', 'b2'), { ...bijlage(HOOFD.uid), op: null }))
+    await assertFails(deleteDoc(doc(als(TRAINER), 'bijlagen', 'b2')))
+    await assertSucceeds(deleteDoc(doc(als(HOOFD), 'bijlagen', 'b2')))
+    const weg = writeBatch(als(TRAINER))
+    weg.delete(doc(als(TRAINER), 'bijlagen', 'b1'))
+    weg.delete(doc(als(TRAINER), 'trainingen', 'b1'))
+    await assertSucceeds(weg.commit())
+  })
+
   it('alleen coördinator of jaarplanbeheerder wijzigt het jaarplan', async () => {
     await assertFails(setDoc(doc(als(TRAINER), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 2 }))
     await assertSucceeds(setDoc(doc(als(HOOFD), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 2 }))
