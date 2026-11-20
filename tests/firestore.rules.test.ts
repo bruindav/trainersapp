@@ -358,9 +358,10 @@ describe('rooster, trainingen en jaarplan', () => {
       door: uid,
       op: serverTimestamp(),
     })
-    const batch = writeBatch(als(TRAINER))
-    batch.set(doc(als(TRAINER), 'trainingen', 'b1'), training(TRAINER.uid))
-    batch.set(doc(als(TRAINER), 'bijlagen', 'b1'), bijlage(TRAINER.uid))
+    const tdb = als(TRAINER)
+    const batch = writeBatch(tdb)
+    batch.set(doc(tdb, 'trainingen', 'b1'), training(TRAINER.uid))
+    batch.set(doc(tdb, 'bijlagen', 'b1'), bijlage(TRAINER.uid))
     await assertSucceeds(batch.commit())
     await assertSucceeds(getDoc(doc(als(HOOFD), 'bijlagen', 'b1')))
     // Zonder training, bij andermans training, namens een ander of te groot: nee.
@@ -376,9 +377,9 @@ describe('rooster, trainingen en jaarplan', () => {
     await seed(async (db) => setDoc(doc(db, 'bijlagen', 'b2'), { ...bijlage(HOOFD.uid), op: null }))
     await assertFails(deleteDoc(doc(als(TRAINER), 'bijlagen', 'b2')))
     await assertSucceeds(deleteDoc(doc(als(HOOFD), 'bijlagen', 'b2')))
-    const weg = writeBatch(als(TRAINER))
-    weg.delete(doc(als(TRAINER), 'bijlagen', 'b1'))
-    weg.delete(doc(als(TRAINER), 'trainingen', 'b1'))
+    const weg = writeBatch(tdb)
+    weg.delete(doc(tdb, 'bijlagen', 'b1'))
+    weg.delete(doc(tdb, 'trainingen', 'b1'))
     await assertSucceeds(weg.commit())
   })
 
