@@ -1,3 +1,4 @@
+// Fix: fix-31 — ook wie de training gaf mag wijzigen/verwijderen; coördinator verwijdert
 // Fix: fix-30 — eigen training wijzigen en (met bevestiging) verwijderen
 // Fix: fix-29 — standaardtitel, meerdere groepen, focus Borstcrawl/Ademhaling/Anders
 // Fix: fix-11 — herinnering en standaardmoment uit het gepubliceerde rooster
@@ -125,8 +126,10 @@ function TrainingenPagina() {
   )
 
   const geselecteerd = data.trainingen.find((t) => t.id === zoek.id) ?? null
-  // Alleen een training die je zelf hebt toegevoegd kun je wijzigen.
-  const isEigen = (t: Training | null | undefined) => !!t && t.aangemaaktDoor === data.huidigeTrainerId
+  // Wijzigen en verwijderen: wie de training toevoegde of gaf (fix-31); de coördinator mag verwijderen.
+  const isEigen = (t: Training | null | undefined) =>
+    !!t && (t.aangemaaktDoor === data.huidigeTrainerId || t.trainerId === data.huidigeTrainerId)
+  const magVerwijderen = (t: Training | null | undefined) => isEigen(t) || !!trainerById(data.huidigeTrainerId)?.coordinator
   const teBewerken = data.trainingen.find((t) => t.id === zoek.bewerk)
   const bewerk = isEigen(teBewerken) ? teBewerken! : null
   const formOpen = !!zoek.nieuw || !!bewerk
@@ -302,6 +305,7 @@ function TrainingenPagina() {
       <TrainingDetail
         training={geselecteerd}
         eigen={isEigen(geselecteerd)}
+        magVerwijderen={magVerwijderen(geselecteerd)}
         onClose={() => navigate({ search: {} })}
         onHergebruik={(t) => openNieuw(t)}
         onWijzig={(t) => navigate({ search: { bewerk: t.id } })}
@@ -383,12 +387,14 @@ function TrainingKaart({ training: t, onOpen }: { training: Training; onOpen: ()
 function TrainingDetail({
   training: t,
   eigen,
+  magVerwijderen,
   onClose,
   onHergebruik,
   onWijzig,
 }: {
   training: Training | null
   eigen: boolean
+  magVerwijderen: boolean
   onClose: () => void
   onHergebruik: (t: Training) => void
   onWijzig: (t: Training) => void
@@ -464,7 +470,7 @@ function TrainingDetail({
               <Button variant={eigen ? 'outline' : 'default'} onClick={() => onHergebruik(t)}>
                 <Copy /> Gebruik als basis
               </Button>
-              {eigen && (
+              {magVerwijderen && (
                 <Button
                   variant={zeker ? 'destructive' : 'outline'}
                   className={cn(!zeker && 'text-destructive')}
@@ -480,7 +486,7 @@ function TrainingDetail({
                 </Button>
               )}
             </SheetFooter>
-            {eigen && zeker && (
+            {magVerwijderen && zeker && (
               <p role="alert" className="px-4 pb-4 text-sm text-destructive">
                 Weet je het zeker? Klik nog een keer om de training definitief te verwijderen.
               </p>

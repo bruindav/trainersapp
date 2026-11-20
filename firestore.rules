@@ -1,3 +1,4 @@
+// Fix: fix-31 — trainingen: ook wie de training gaf mag wijzigen en verwijderen
 // Fix: fix-30 — trainingen: eigen training wijzigen en verwijderen
 // Fix: fix-29 — trainingen: groepen[] (hele groep, op inschrijving of een of meer groepen)
 // Fix: fix-28 — demo-account leest alleen de geanonimiseerde demo_*-collecties.
@@ -456,7 +457,8 @@ service cloud.firestore {
 
     // --- Trainingen ---------------------------------------------------------
 
-    // fix-30: wie een training heeft toegevoegd, mag hem wijzigen en verwijderen.
+    // fix-30/31: wie een training toevoegde of gaf, mag hem wijzigen en verwijderen;
+    // de coördinator mag verwijderen.
     function geldigeTraining(d) {
       return d.keys().hasOnly([
              'datum', 'sessieId', 'groepId', 'groepen', 'trainerId', 'titel', 'focus', 'blokken',
@@ -486,14 +488,15 @@ service cloud.firestore {
         && request.resource.data.aangemaaktDoor == request.auth.uid
         && request.resource.data.aangemaaktOp == request.time;
       allow update: if isTrainer()
-        && resource.data.aangemaaktDoor == request.auth.uid
+        && (resource.data.aangemaaktDoor == request.auth.uid || resource.data.trainerId == request.auth.uid)
         && geldigeTraining(request.resource.data)
         && request.resource.data.aangemaaktDoor == resource.data.aangemaaktDoor
         && request.resource.data.aangemaaktOp == resource.data.aangemaaktOp
         && request.resource.data.gewijzigdOp == request.time;
-      // Verwijderen: wie hem heeft toegevoegd; de coördinator mag opruimen.
+      // Verwijderen: wie hem toevoegde of gaf; de coördinator mag opruimen.
       allow delete: if isTrainer() && (
         resource.data.aangemaaktDoor == request.auth.uid
+        || resource.data.trainerId == request.auth.uid
         || isCoordinator()
       );
     }
