@@ -1,3 +1,4 @@
+// Fix: fix-26 — geen dubbele opbouwnaam; kleinere, gekleurde spelden (lichtblauw / rood doel)
 // Fix: fix-25 — wedstrijden als speld op de startdatum, labels zonder overlap
 // Fix: fix-24 — bewerken pas na 'Jaarplan bewerken'; verwijderknoppen bij fases en aandachtsgebieden; 'Nu' inklapbaar
 // Fix: fix-23 — blokken inklapbaar (onthouden per apparaat); seizoensoverzicht verborgen
@@ -231,7 +232,10 @@ function JaarplanPagina() {
         />
 
         <div
-          className="flex flex-wrap items-center gap-2 print:hidden"
+          className={cn(
+            'flex flex-wrap items-center gap-2 print:hidden',
+            opbouwen.length < 2 && !magBewerken && 'hidden',
+          )}
           role="tablist"
           aria-label="Opbouw"
         >
@@ -275,6 +279,7 @@ function JaarplanPagina() {
             wedstrijden={data.wedstrijden}
             magBewerken={magBewerken}
             onInstellingen={() => setInstellingen(opbouw)}
+            toonNaam={opbouwen.length < 2 && !magBewerken}
             onFase={(f) => setFaseOpen({ opbouw, fase: f })}
           />
         ) : (
@@ -484,7 +489,10 @@ function Tijdlijn({
         </div>
         <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>Blok = fase</span>
-          <span>Speld = wedstrijd op die datum (rood: doelwedstrijd)</span>
+          <span>
+            Speld = wedstrijd op die datum (blauw: wedstrijd, rood:
+            doelwedstrijd)
+          </span>
           <span>Gestreept = geen training</span>
         </p>
       </div>
@@ -523,20 +531,20 @@ function WedstrijdPinnen({
   return (
     <div className="relative" style={{ height: hoogte }}>
       {pinnen.map(({ w, x, rechts, rij }) => {
-        const kleur = w.doel ? 'bg-primary' : 'bg-foreground'
+        const kleur = w.doel ? 'bg-primary' : 'bg-nat-blue'
         const datum = w.einddatum
           ? formatRange(w.datum, w.einddatum)
           : formatShort(w.datum)
         return (
           <div key={w.id}>
             <span
-              className={cn('absolute top-0 w-0.5 -translate-x-1/2', kleur)}
+              className={cn('absolute top-0 w-px -translate-x-1/2', kleur)}
               style={{ left: `${x}%`, height: rij * RIJ + 12 }}
               aria-hidden
             />
             <span
               className={cn(
-                'absolute -top-1.5 size-3 -translate-x-1/2 rounded-full ring-2 ring-card',
+                'absolute -top-1 size-2 -translate-x-1/2 rounded-full ring-2 ring-card',
                 kleur,
               )}
               style={{ left: `${x}%` }}
@@ -549,7 +557,7 @@ function WedstrijdPinnen({
                 'absolute z-10 flex max-w-[22%] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-5 font-bold whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
                 w.doel
                   ? 'bg-primary text-primary-foreground'
-                  : 'border border-muted-foreground/40 bg-card text-foreground',
+                  : 'border border-nat-blue/60 bg-nat-blue/10 text-foreground',
                 w.onderVoorbehoud && 'border-dashed',
               )}
               style={{
@@ -841,7 +849,9 @@ function OpbouwBlokken({
   magBewerken,
   onInstellingen,
   onFase,
+  toonNaam,
 }: {
+  toonNaam: boolean
   opbouw: Opbouw
   plan: Jaarplan
   wedstrijden: Wedstrijd[]
@@ -857,10 +867,12 @@ function OpbouwBlokken({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-foreground px-4 py-3 text-background sm:px-5">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-extrabold">{opbouw.naam}</h2>
-          <p className="text-sm opacity-80">
+          <h2 className={cn('text-lg font-extrabold', !toonNaam && 'sr-only')}>
+            {opbouw.naam}
+          </h2>
+          <p className="text-sm text-muted-foreground">
             {bereik ? formatRange(bereik.van, bereik.tot) : 'Nog geen fases'}
             {doel &&
               ` · doelwedstrijd: ${doel.naam} (${formatShort(doel.datum)})`}
