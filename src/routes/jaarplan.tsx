@@ -1,3 +1,4 @@
+// Fix: fix-25 — wedstrijden als speld op de startdatum, labels zonder overlap
 // Fix: fix-24 — bewerken pas na 'Jaarplan bewerken'; verwijderknoppen bij fases en aandachtsgebieden; 'Nu' inklapbaar
 // Fix: fix-23 — blokken inklapbaar (onthouden per apparaat); seizoensoverzicht verborgen
 // Fix: fix-21 — jaarplan als trainingsopbouw: tijdlijn, inleiding, aandachtsgebieden, zones en fases in blokken
@@ -475,41 +476,97 @@ function Tijdlijn({
                 </>
               )}
             </div>
-            <div className="relative mt-2 h-14">
-              {zichtbareWedstrijden.map((w, i) => (
-                <Link
-                  key={w.id}
-                  to="/wedstrijden"
-                  className={cn(
-                    'absolute inline-flex max-w-48 items-center gap-1 truncate rounded-full px-2 py-1 text-xs font-bold whitespace-nowrap',
-                    w.doel
-                      ? 'bg-primary text-primary-foreground'
-                      : 'border border-dashed border-muted-foreground bg-card text-foreground',
-                  )}
-                  style={{
-                    left: `min(${pos(w.datum).links}%, calc(100% - 12rem))`,
-                    top: i % 2 === 0 ? 0 : 28,
-                  }}
-                >
-                  <Flag className="size-3.5 shrink-0" aria-hidden />
-                  <span className="truncate">
-                    {w.naam} · {formatShort(w.datum)}
-                    {w.onderVoorbehoud ? ' (o.v.)' : ''}
-                  </span>
-                </Link>
-              ))}
-            </div>
+            <WedstrijdPinnen
+              wedstrijden={zichtbareWedstrijden}
+              positie={(d) => pos(d).links}
+            />
           </div>
         </div>
         <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>Blok = fase</span>
-          <span>
-            Vlag = wedstrijd (rood: doelwedstrijd, gestippeld: niet doel)
-          </span>
+          <span>Speld = wedstrijd op die datum (rood: doelwedstrijd)</span>
           <span>Gestreept = geen training</span>
         </p>
       </div>
     </section>
+  )
+}
+
+/**
+ * Wedstrijden onder de tijdlijn: een speld (bolletje met steeltje) precies op de
+ * startdatum, met het label in een eigen rij zodat labels elkaar niet overlappen.
+ */
+function WedstrijdPinnen({
+  wedstrijden,
+  positie,
+}: {
+  wedstrijden: Wedstrijd[]
+  positie: (datum: string) => number
+}) {
+  // Een label is hoogstens ~22% van de tijdlijn breed (min. 760px breed).
+  const BREED = 22
+  const RIJ = 26
+  const eindes: number[] = []
+  const pinnen = [...wedstrijden]
+    .sort((a, b) => a.datum.localeCompare(b.datum))
+    .map((w) => {
+      const x = positie(w.datum)
+      const rechts = x > 100 - BREED
+      const van = rechts ? x - BREED : x
+      let rij = eindes.findIndex((e) => e < van)
+      if (rij === -1) rij = eindes.length
+      eindes[rij] = van + BREED
+      return { w, x, rechts, rij }
+    })
+  const hoogte = Math.max(1, eindes.length) * RIJ + 10
+
+  return (
+    <div className="relative" style={{ height: hoogte }}>
+      {pinnen.map(({ w, x, rechts, rij }) => {
+        const kleur = w.doel ? 'bg-primary' : 'bg-foreground'
+        const datum = w.einddatum
+          ? formatRange(w.datum, w.einddatum)
+          : formatShort(w.datum)
+        return (
+          <div key={w.id}>
+            <span
+              className={cn('absolute top-0 w-0.5 -translate-x-1/2', kleur)}
+              style={{ left: `${x}%`, height: rij * RIJ + 12 }}
+              aria-hidden
+            />
+            <span
+              className={cn(
+                'absolute -top-1.5 size-3 -translate-x-1/2 rounded-full ring-2 ring-card',
+                kleur,
+              )}
+              style={{ left: `${x}%` }}
+              aria-hidden
+            />
+            <Link
+              to="/wedstrijden"
+              title={`${w.naam} · ${datum}${w.onderVoorbehoud ? ' (onder voorbehoud)' : ''}`}
+              className={cn(
+                'absolute z-10 flex max-w-[22%] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-5 font-bold whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                w.doel
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-muted-foreground/40 bg-card text-foreground',
+                w.onderVoorbehoud && 'border-dashed',
+              )}
+              style={{
+                top: rij * RIJ + 10,
+                ...(rechts ? { right: `${100 - x}%` } : { left: `${x}%` }),
+                [rechts ? 'borderTopRightRadius' : 'borderTopLeftRadius']: 0,
+              }}
+            >
+              <span className="shrink-0">{datum}</span>
+              <span className="truncate font-semibold opacity-90">
+                {w.naam}
+              </span>
+            </Link>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -600,7 +657,9 @@ function NuKaart({
             {doel && doel.datum >= vandaag && (
               <>
                 {' '}
-                · nog {daysBetween(vandaag, doel.datum)} dagen tot {doel.naam}
+                · nog {daysBetween(vandaag, doel.datum)}{' '}
+                {daysBetween(vandaag, doel.datum) === 1 ? 'dag' : 'dagen'} tot{' '}
+                {doel.naam}
               </>
             )}
           </p>
