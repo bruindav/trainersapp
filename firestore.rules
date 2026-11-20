@@ -1,3 +1,4 @@
+// Fix: fix-27 — demo-account: overal lezen, niets wijzigen (behalve feedback sturen).
 // Fix: fix-21 — wedstrijden, taak wedstrijdBeheer, jaarplan met opbouwen en zones.
 // Fix: fix-16 — feedback: iedereen stuurt, alleen de coördinator leest.
 // Fix: fix-15 — trainingsmomenten: ritmeWeken (1–8).
@@ -36,6 +37,17 @@ service cloud.firestore {
     }
     function isTrainer() {
       return ingelogd() && exists(trainerPad(request.auth.uid));
+    }
+    // fix-27: het demo-account (e-mail + wachtwoord) mag alles lezen, maar heeft
+    // geen trainer-document en kan dus niets schrijven.
+    function isDemo() {
+      return ingelogd()
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'demotrainer@demo.nu';
+    }
+    function leest() {
+      return isTrainer() || isDemo();
     }
     function ikData() {
       return get(trainerPad(request.auth.uid)).data;
@@ -144,7 +156,7 @@ service cloud.firestore {
     // --- Teamleden ----------------------------------------------------------
 
     match /trainers/{uid} {
-      allow read: if isTrainer() || (ingelogd() && request.auth.uid == uid);
+      allow read: if leest() || (ingelogd() && request.auth.uid == uid);
 
       allow create: if geldigeTrainer(request.resource.data)
         && (!('sinds' in request.resource.data) || request.resource.data.sinds == request.time)
@@ -211,7 +223,7 @@ service cloud.firestore {
     // --- Groep toezichthouders (zonder account) ------------------------------
 
     match /toezichthouders/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if magTeam()
         && request.resource.data.keys().hasOnly(['naam', 'notitie'])
         && tekst(request.resource.data.naam, 80) && request.resource.data.naam.size() > 0
@@ -229,7 +241,7 @@ service cloud.firestore {
     }
 
     match /trainingsmomenten/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if isCoordinator()
         && request.resource.data.keys().hasOnly(['dag', 'start', 'eind', 'locatie', 'trainersNodig', 'actief', 'volgorde', 'vasteTrainers', 'geldigVan', 'geldigTot', 'ritmeWeken'])
         && (!('ritmeWeken' in request.resource.data)
@@ -253,7 +265,7 @@ service cloud.firestore {
     }
 
     match /roosterperiodes/{pid} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if isCoordinator()
         && request.resource.data.keys().hasOnly([
              'naam', 'soort', 'van', 'tot', 'status', 'deadline', 'momentIds', 'losseTrainingen',
@@ -335,7 +347,7 @@ service cloud.firestore {
       }
 
       match /wijzigingslog/{id} {
-        allow read: if isTrainer();
+        allow read: if leest();
         allow create: if isTrainer()
           && request.resource.data.keys().hasOnly(['soort', 'tekst', 'door', 'op'])
           && request.resource.data.soort in ['vrijgeven', 'overnemen', 'ruil', 'overdracht', 'indeling']
@@ -349,7 +361,7 @@ service cloud.firestore {
       // alleen de eigen in, zolang de periode beschikbaarheid opvraagt; de
       // coördinator mag altijd (bijv. na rondbellen).
       match /beschikbaarheid/{uid} {
-        allow read: if isTrainer();
+        allow read: if leest();
         allow create, update: if isTrainer()
           && request.resource.data.keys().hasOnly(['keuzes', 'maxPerMaand', 'nietKunnen', 'bijgewerktOp', 'bijgewerktDoor'])
           && request.resource.data.keuzes is map && request.resource.data.keuzes.size() <= 100
@@ -369,7 +381,7 @@ service cloud.firestore {
     // --- Ruilverzoeken (fix-11) ------------------------------------------------
 
     match /ruilverzoeken/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create: if isTrainer()
         && request.resource.data.keys().hasOnly(['periodeId', 'van', 'naar', 'vanKey', 'terugKey', 'status', 'bericht', 'aangemaaktOp'])
         && request.resource.data.van == request.auth.uid
@@ -394,18 +406,18 @@ service cloud.firestore {
     }
 
     match /{pad=**}/wijzigingslog/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
     }
 
     // Collection-group-query op alle beschikbaarheid (voor overzichten).
     match /{pad=**}/beschikbaarheid/{uid} {
-      allow read: if isTrainer();
+      allow read: if leest();
     }
 
     // --- Rooster ------------------------------------------------------------
 
     match /roosterWijzigingen/{slot} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if isTrainer()
         && request.resource.data.keys().hasOnly(['weekStart', 'sessieId', 'groepId', 'trainerId', 'gewijzigdDoor', 'gewijzigdOp'])
         && isDatum(request.resource.data.weekStart)
@@ -419,7 +431,7 @@ service cloud.firestore {
     }
 
     match /afwezigheden/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       // Zelf melden volgt later; nu alleen eigen of door de coördinator.
       function geldigeAfwezigheid(d) {
         return d.keys().hasOnly(['trainerId', 'van', 'tot', 'reden'])
@@ -441,7 +453,7 @@ service cloud.firestore {
     // --- Trainingen ---------------------------------------------------------
 
     match /trainingen/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create: if isTrainer()
         && request.resource.data.keys().hasOnly([
              'datum', 'sessieId', 'groepId', 'trainerId', 'titel', 'focus', 'blokken',
@@ -470,7 +482,7 @@ service cloud.firestore {
     // Iedere trainer kan feedback sturen (als zichzelf); alleen de
     // coördinator kan het lezen, afhandelen en verwijderen.
     match /feedback/{id} {
-      allow create: if isTrainer()
+      allow create: if (isTrainer() || isDemo())
         && request.resource.data.keys().hasOnly(['tekst', 'pagina', 'breedte', 'screenshot', 'door', 'naam', 'op', 'status'])
         && request.resource.data.door == request.auth.uid
         && tekst(request.resource.data.tekst, 2000) && request.resource.data.tekst.size() > 0
@@ -492,7 +504,7 @@ service cloud.firestore {
     // --- Jaarplan -----------------------------------------------------------
 
     match /jaarplan/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if magJaarplanNa()
         && id == 'huidig'
         && request.resource.data.keys().hasOnly([
@@ -514,7 +526,7 @@ service cloud.firestore {
 
     // --- Wedstrijden (fix-21) ------------------------------------------------
     match /wedstrijden/{id} {
-      allow read: if isTrainer();
+      allow read: if leest();
       allow create, update: if magWedstrijden()
         && request.resource.data.keys().hasOnly(['naam', 'datum', 'einddatum', 'plaats', 'baan', 'inschrijvenVoor',
                                                  'onderVoorbehoud', 'doel', 'notitie'])

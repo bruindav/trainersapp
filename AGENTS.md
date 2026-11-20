@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-27 — demo-account (alleen lezen) -->
 <!-- Fix: fix-21 — trainingsopbouw, wedstrijden, taak wedstrijdBeheer, rijke tekst -->
 <!-- Fix: fix-20 — help, privacy, disclaimer, digidave, versie, iOS -->
 <!-- Fix: fix-19 — alleen Google-inlog; uitnodigingsmail via EmailJS -->
@@ -213,6 +214,7 @@ pnpm preview       # Preview the production build
 - **Version** (fix-20): `src/versie.ts` exposes `VERSIE`, filled at build time by `vite.config.ts` from the last commit subject (`fix-N: …`), shown in the footer and on the info pages. So every fix commit must start with `fix-N:`.
 - **iOS** (fix-20): build target includes Safari 15; `apple-touch-icon.png` for the home screen; Google login uses a popup (redirect breaks on Safari); Google blocks login inside in-app browsers, the error tells users to open Safari.
 - **Jaarplan** (fix-21): two views. *Trainingsopbouw* follows the Word document: per opbouw (one per build-up to a target competition, e.g. Sept–Dec → Frankfurt, after the Christmas break → EuroGames) an inleiding, aandachtsgebieden and fases with zones and example sets; zones are season-wide. *Seizoensoverzicht* is the original block view, kept as an alternative (owner's wish). Every edit sets status back to `concept`; publishing bumps `versie`. Rich texts are stored as HTML and always rendered through `maakVeilig` (DOMPurify: formatting tags only, `style` reduced to `color`). Competitions live in their own collection; a later import from the club calendar is a wish.
+- **Demo-account** (fix-27): `demotrainer@demo.nu` signs in with email/password (Email/Password provider in Firebase). The password is never in the code; the owner hands it out. `bepaalToegang` lets it in before the emailVerified check with a virtual trainer (`demoTrainer`, rol 'Geen training', no tasks, `demo: true`) that is not stored in Firestore; `startSync` adds it to the trainer list. The rules (`isDemo()`, `leest()`) give it read access only, plus creating feedback. A yellow banner tells the user nothing can be saved; write buttons show the normal error toast.
 - **Removed trainers** show as "Oud-trainer" on their old trainings.
 - **Uploads** only keep the file name for now; storing files is milestone 4.
 

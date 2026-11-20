@@ -1,3 +1,4 @@
+// Fix: fix-27 — demo-trainer (alleen kijken)
 // Fix: fix-21 — taak Wedstrijdcoördinator; jaarplan met opbouwen, zones en wedstrijden
 // Fix: fix-17 — namen van testtrainers bijgewerkt
 // Fix: fix-11 — ruilverzoeken en wijzigingslog in AppData
@@ -50,6 +51,30 @@ export interface Trainer extends Taken {
   email?: string
   /** Testtrainer zonder account (alleen om de app uit te proberen). */
   test?: boolean
+  /** Het demo-account (fix-27): kijkt rond, kan niets opslaan. */
+  demo?: boolean
+}
+
+/** Demo-account om de app te ontdekken zonder uitnodiging (fix-27). */
+export const DEMO_EMAIL = 'demotrainer@demo.nu'
+
+export function demoTrainer(uid: string): Trainer {
+  return {
+    id: uid,
+    naam: 'Demo-trainer',
+    initialen: 'DT',
+    kleur: '#8966a5',
+    // Niet in de rotatie: het demo-account geeft geen training.
+    rol: 'Geen training',
+    specialiteit: '',
+    email: DEMO_EMAIL,
+    coordinator: false,
+    jaarplanBeheer: false,
+    teamBeheer: false,
+    toezichthouder: false,
+    wedstrijdBeheer: false,
+    demo: true,
+  }
 }
 
 export const TAAK_LABELS: Record<keyof Taken, string> = {

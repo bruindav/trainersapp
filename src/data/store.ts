@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-27 — demo-trainer (staat niet in Firestore) aan de lijst toevoegen.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
  * Fix: fix-17 — naam van een teamlid wijzigen.
  * Fix: fix-21 — wedstrijden, jaarplan met opbouwen en zones (seizoensoverzicht blijft).
@@ -180,9 +181,10 @@ export function naarTrainer(id: string, d: DocumentData): Trainer {
  * Start de live-koppeling met Firestore voor de ingelogde trainer.
  * Geeft een functie terug die alle listeners stopt.
  */
-export function startSync(uid: string, magTeam: boolean): () => void {
+export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => void {
   const db = getDb()
   state = leegeData(uid)
+  if (demo) state = { ...state, trainers: [demo] }
   syncStatus = 'laden'
   emit()
 
@@ -206,6 +208,7 @@ export function startSync(uid: string, magTeam: boolean): () => void {
       (snap) => {
         const trainers = snap.docs
           .map((d) => naarTrainer(d.id, d.data()))
+          .concat(demo ? [demo] : [])
           .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
         setState((s) => ({ ...s, trainers }))
         geladen('trainers')

@@ -1,3 +1,4 @@
+// Fix: fix-27 — inloggen met het demo-account (alleen kijken)
 // Fix: fix-21 — taak wedstrijdBeheer bij uitnodiging en inrichting
 // Fix: fix-19 — geen uitnodigingslink meer via Firebase (EmailJS + Google-inlog)
 // Fix: fix-18 — uitnodigingsmail met inloglink; mails in het Nederlands
@@ -17,6 +18,7 @@ import {
   GoogleAuthProvider,
   isSignInWithEmailLink,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
   sendSignInLinkToEmail,
   signInWithEmailLink,
   signInWithPopup,
@@ -36,7 +38,7 @@ import {
 } from 'firebase/firestore'
 
 import { getDb, getFirebaseAuth, isFirebaseGeconfigureerd } from '@/lib/firebase'
-import { STANDAARD_JAARPLAN, TRAINER_KLEUREN, type Trainer, type Uitnodiging } from './fixtures'
+import { DEMO_EMAIL, STANDAARD_JAARPLAN, TRAINER_KLEUREN, demoTrainer, type Trainer, type Uitnodiging } from './fixtures'
 import { JAARPLAN_DOC, initialenVan, naarTrainer } from './store'
 
 export type AuthStatus =
@@ -129,6 +131,14 @@ function foutCode(err: unknown) {
 async function bepaalToegang(user: User, mijnGeneratie = generatie) {
   const actueel = () => mijnGeneratie === generatie
   const db = getDb()
+
+  // Het demo-account (e-mail + wachtwoord) mag rondkijken; de regels staan
+  // het alleen lezen toe (en feedback sturen).
+  if (isDemoGebruiker(user)) {
+    stopTrainerListener?.()
+    zet({ soort: 'ingelogd', user, trainer: demoTrainer(user.uid) })
+    return
+  }
 
   // Alleen bewezen e-mailadressen (Google of e-maillink) krijgen toegang.
   if (!user.emailVerified) {
@@ -243,6 +253,17 @@ export async function rondEmailLinkAf(email: string) {
   }
   // Haal de inlogcode uit de adresbalk.
   window.history.replaceState(null, '', '/')
+}
+
+export function isDemoGebruiker(user: User) {
+  return (
+    user.email?.toLowerCase() === DEMO_EMAIL && user.providerData.some((p) => p.providerId === 'password')
+  )
+}
+
+/** Inloggen met het demo-account; het wachtwoord krijgen trainers van de coördinator. */
+export async function logInAlsDemo(wachtwoord: string) {
+  await signInWithEmailAndPassword(getFirebaseAuth(), DEMO_EMAIL, wachtwoord)
 }
 
 export async function logInMetGoogle() {

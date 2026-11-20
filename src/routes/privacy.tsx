@@ -1,3 +1,4 @@
+// Fix: fix-27 — privacy: demo-account
 // Fix: fix-20 — privacyverklaring
 import { createFileRoute } from '@tanstack/react-router'
 
@@ -68,7 +69,11 @@ function PrivacyPagina() {
             zo afgesproken, zodat je zelf kunt zien wie je kunt vragen om te ruilen.
           </li>
           <li>De coördinator ziet daarnaast de openstaande uitnodigingen en de feedback.</li>
-          <li>Zonder uitnodiging kan niemand inloggen of gegevens zien.</li>
+          <li>
+            Zonder uitnodiging kan niemand inloggen of gegevens zien. Uitzondering is het demo-account: wie daarvan het
+            wachtwoord van de coördinator krijgt, kan hetzelfde zien als een trainer (namen, rooster en
+            beschikbaarheid), maar niets wijzigen.
+          </li>
         </ul>
       </section>
 

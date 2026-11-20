@@ -1,3 +1,4 @@
+// Fix: fix-27 — help: demo-account
 // Fix: fix-24 — help: bewerken aanzetten
 // Fix: fix-23 — help: blokken inklappen
 // Fix: fix-21 — help over trainingsopbouw en wedstrijden
@@ -58,6 +59,11 @@ function HelpPagina() {
             en kies "Mijn huidige e-mailadres gebruiken".
           </li>
           <li>Zie je "Geen toegang"? Dan klopt het e-mailadres niet met de uitnodiging. Vraag de coördinator.</li>
+          <li>
+            Eerst rondkijken zonder uitnodiging? Kies op het inlogscherm "Eerst rondkijken met het demo-account" en vul
+            het wachtwoord in dat je van de coördinator krijgt. Met het demo-account kun je alles bekijken, maar niets
+            opslaan. Feedback geven kan wel.
+          </li>
         </ul>
       </section>
 

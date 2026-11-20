@@ -1,9 +1,10 @@
+// Fix: fix-27 — inloggen met het demo-account
 // Fix: fix-20 — help/privacy/disclaimer en digidave onder het inlogscherm
 // Fix: fix-19 — alleen inloggen met Google (geen inloglinks meer: max 5 per dag)
 // Fix: fix-3 — eerste inrichting door de coördinator
 // Fix: fix-1 — schermen rond inloggen (ontwerp: UI-agent)
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Loader2, RefreshCw, ShieldX } from 'lucide-react'
+import { Eye, Loader2, RefreshCw, ShieldX } from 'lucide-react'
 import { FirebaseError } from 'firebase/app'
 import { toast } from 'sonner'
 
@@ -17,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   annuleerLinkBevestigen,
+  logInAlsDemo,
   logInMetGoogle,
   logUit,
   richAppIn,
@@ -136,8 +138,87 @@ function Inloggen() {
         <p className="text-center text-sm text-muted-foreground">
           Nog geen toegang? Vraag de coördinator om een uitnodiging.
         </p>
+        <DemoInloggen />
       </CardContent>
     </AuthLayout>
+  )
+}
+
+/** Rondkijken met het demo-account; het wachtwoord krijg je van de coördinator. */
+function DemoInloggen() {
+  const [open, setOpen] = useState(false)
+  const [wachtwoord, setWachtwoord] = useState('')
+  const [fout, setFout] = useState('')
+  const [bezig, setBezig] = useState(false)
+
+  async function verstuur(e: FormEvent) {
+    e.preventDefault()
+    if (!wachtwoord) return
+    setFout('')
+    setBezig(true)
+    try {
+      await logInAlsDemo(wachtwoord)
+    } catch (err) {
+      const code = foutCode(err)
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+        setFout('Dat wachtwoord klopt niet. Vraag de coördinator om het juiste wachtwoord.')
+      } else if (code === 'auth/too-many-requests') {
+        setFout('Te vaak geprobeerd. Wacht even en probeer het dan opnieuw.')
+      } else if (code === 'auth/operation-not-allowed') {
+        setFout('Inloggen met het demo-account staat nog niet aan. Laat het de coördinator weten.')
+      } else {
+        setFout('Inloggen met het demo-account lukte niet. Controleer je verbinding en probeer het opnieuw.')
+      }
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="border-t pt-4 text-center">
+        <Button variant="outline" className="w-full rounded-full" onClick={() => setOpen(true)}>
+          <Eye aria-hidden /> Eerst rondkijken met het demo-account
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={verstuur} className="space-y-3 border-t pt-4" aria-labelledby="demo-titel">
+      <div>
+        <h2 id="demo-titel" className="text-base font-bold">
+          Demo-account
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Bekijk de app zonder je te registreren. Je kunt rondkijken, maar niets opslaan.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="demo-email">E-mailadres</Label>
+        <Input id="demo-email" value="DemoTrainer@demo.nu" readOnly autoComplete="username" />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="demo-wachtwoord">Wachtwoord</Label>
+        <Input
+          id="demo-wachtwoord"
+          type="password"
+          autoComplete="current-password"
+          value={wachtwoord}
+          onChange={(e) => setWachtwoord(e.target.value)}
+          autoFocus
+        />
+        <p className="text-xs text-muted-foreground">Het wachtwoord krijg je van de coördinator.</p>
+      </div>
+      {fout && (
+        <Alert variant="destructive">
+          <AlertDescription>{fout}</AlertDescription>
+        </Alert>
+      )}
+      <Button type="submit" className="h-11 w-full rounded-full" disabled={bezig || !wachtwoord}>
+        {bezig && <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />} Inloggen als demo
+      </Button>
+    </form>
   )
 }
 

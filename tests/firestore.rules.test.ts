@@ -1,3 +1,4 @@
+// Fix: fix-27 — demo-account: alleen lezen (en feedback sturen)
 // Fix: fix-15 — regels voor ritmeWeken
 // Fix: fix-12 — regels voor vaste trainers en geldigheid van momenten
 // Fix: fix-11 — vrijgeven, overnemen, ruilen
@@ -555,5 +556,45 @@ describe('trainingsopbouw en wedstrijden', () => {
     await assertFails(setDoc(doc(als(WED), 'wedstrijden', 'w7'), wedstrijd({ naam: '' })))
     await assertFails(deleteDoc(doc(als(TRAINER), 'wedstrijden', 'w1')))
     await assertSucceeds(deleteDoc(doc(als(WED), 'wedstrijden', 'w1')))
+  })
+})
+
+// Fix: fix-27 — demo-account
+describe('demo-account', () => {
+  beforeEach(standaardTeam)
+  const DEMO = { uid: 'demo', email: 'DemoTrainer@demo.nu' }
+  const alsDemo = (provider = 'password', email = DEMO.email) =>
+    env
+      .authenticatedContext(DEMO.uid, { email, email_verified: false, firebase: { sign_in_provider: provider } } as never)
+      .firestore()
+
+  it('kan lezen, zonder geverifieerd e-mailadres', async () => {
+    await assertSucceeds(getDoc(doc(alsDemo(), 'jaarplan', 'huidig')))
+    await assertSucceeds(getDoc(doc(alsDemo(), 'trainers', HOOFD.uid)))
+  })
+  it('kan niets opslaan', async () => {
+    const db = alsDemo()
+    await assertFails(setDoc(doc(db, 'trainingen', 't1'), { titel: 'x' }))
+    await assertFails(setDoc(doc(db, 'trainers', DEMO.uid), trainerDoc('Demo', 'Trainer', DEMO.email)))
+    await assertFails(updateDoc(doc(db, 'jaarplan', 'huidig'), { status: 'definitief' }))
+    await assertFails(deleteDoc(doc(db, 'trainers', TRAINER.uid)))
+  })
+  it('kan feedback sturen', async () => {
+    await assertSucceeds(
+      setDoc(doc(alsDemo(), 'feedback', 'd1'), {
+        tekst: 'Mooi!',
+        pagina: '/',
+        breedte: 390,
+        door: DEMO.uid,
+        naam: 'Demo-trainer',
+        op: serverTimestamp(),
+        status: 'nieuw',
+      }),
+    )
+    await assertFails(getDoc(doc(alsDemo(), 'feedback', 'd1')))
+  })
+  it('alleen met wachtwoord en het demo-adres', async () => {
+    await assertFails(getDoc(doc(alsDemo('google.com'), 'jaarplan', 'huidig')))
+    await assertFails(getDoc(doc(alsDemo('password', 'ander@demo.nu'), 'jaarplan', 'huidig')))
   })
 })
