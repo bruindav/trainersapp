@@ -1,5 +1,7 @@
+// Fix: fix-36 — nogVastTeLeggen: ook vastgelegd als een collega het deed
 // Fix: fix-11 — na publicatie: vrijgeven, overnemen, ruilen; gepubliceerde trainingen
-import type { AppData, Trainer } from './fixtures'
+import { SESSIES, type AppData, type Trainer } from './fixtures'
+import { addDays, startOfWeek } from '@/lib/dates'
 import { controleer, openPlekken, type Indeling } from './indeling'
 import { trainingenInPeriode, type PeriodeTraining, type Roosterperiode } from './rooster'
 
@@ -67,4 +69,26 @@ export function staatIngeroosterd(g: GeroosterdeTraining, trainerId: string) {
 /** Kan deze trainer deze open plek overnemen? */
 export function kanOvernemen(g: GeroosterdeTraining, trainer: Trainer) {
   return g.open > 0 && trainer.rol !== 'Geen training' && !staatIngeroosterd(g, trainer.id)
+}
+
+/**
+ * Mijn ingeroosterde trainingen van vorige en deze week die nog niet in het logboek staan.
+ * fix-36: vastgelegd = er staat een training op die datum en dat tijdstip (door wie dan
+ * ook, bv. de andere trainer van die ochtend), of een die ik gaf of toevoegde.
+ */
+export function nogVastTeLeggen(data: AppData, vandaag: string) {
+  const ik = data.huidigeTrainerId
+  const isVastgelegd = (datum: string, start: string) =>
+    data.trainingen.some(
+      (t) =>
+        t.datum === datum &&
+        (SESSIES.find((s) => s.id === t.sessieId)?.start === start || t.trainerId === ik || t.aangemaaktDoor === ik),
+    )
+  return gepubliceerdeTrainingen(data).filter(
+    (g) =>
+      staatIngeroosterd(g, ik) &&
+      g.training.datum < vandaag &&
+      g.training.datum >= addDays(startOfWeek(vandaag), -7) &&
+      !isVastgelegd(g.training.datum, g.training.start),
+  )
 }

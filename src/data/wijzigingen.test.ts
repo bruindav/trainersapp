@@ -1,8 +1,9 @@
+// Fix: fix-36 — nogVastTeLeggen
 // Fix: fix-11 — gepubliceerde trainingen en wie een open plek mag overnemen
 import { describe, expect, it } from 'vitest'
 
 import { GEEN_TAKEN, STANDAARD_JAARPLAN, type AppData, type Trainer } from './fixtures'
-import { gepubliceerdeTrainingen, kanOvernemen, staatIngeroosterd } from './wijzigingen'
+import { gepubliceerdeTrainingen, kanOvernemen, nogVastTeLeggen, staatIngeroosterd } from './wijzigingen'
 
 const tr = (id: string, extra: Partial<Trainer> = {}): Trainer => ({
   id, naam: id, initialen: id, kleur: '#000', rol: 'Trainer', specialiteit: '', ...GEEN_TAKEN, ...extra,
@@ -49,5 +50,24 @@ describe('gepubliceerdeTrainingen', () => {
     expect(kanOvernemen(eerste, tr('b'))).toBe(true)
     expect(kanOvernemen(eerste, tr('c', { rol: 'Geen training' }))).toBe(false)
     expect(kanOvernemen(tweede, tr('a'))).toBe(false) // geen plek open
+  })
+})
+
+describe('nogVastTeLeggen (fix-36)', () => {
+  const training = (extra: Record<string, unknown>) =>
+    ({ id: 'x', datum: '2027-01-05', sessieId: 's-di', groepId: 'g-hele', groepen: ['g-hele'], titel: '', focus: [], blokken: [], notities: '', trainerId: 'b', ...extra }) as AppData['trainingen'][number]
+  const met = (trainingen: AppData['trainingen']) => ({ ...data('gepubliceerd'), trainingen })
+
+  it('meldt een ingeroosterde training zonder logboek', () => {
+    expect(nogVastTeLeggen(met([]), '2027-01-07').map((g) => g.training.datum)).toEqual(['2027-01-05'])
+  })
+  it('niet meer als een collega hem al vastlegde op die datum en dat tijdstip', () => {
+    expect(nogVastTeLeggen(met([training({ trainerId: 'b', aangemaaktDoor: 'b' })]), '2027-01-07')).toEqual([])
+  })
+  it('niet meer als ik hem vastlegde, ook met een ander moment', () => {
+    expect(nogVastTeLeggen(met([training({ sessieId: 's-zo', trainerId: 'b', aangemaaktDoor: 'a' })]), '2027-01-07')).toEqual([])
+  })
+  it('wel als er alleen op een andere datum iets staat', () => {
+    expect(nogVastTeLeggen(met([training({ datum: '2027-01-04' })]), '2027-01-07')).toHaveLength(1)
   })
 })

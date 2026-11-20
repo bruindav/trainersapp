@@ -1,3 +1,4 @@
+// Fix: fix-36 — 'Nog vast te leggen' ook weg als een collega de training al vastlegde
 // Fix: fix-34 — training in de opbouw van het trainingsschema (opzet, doel, onderdelen, per baan, aandachtspunten)
 // Fix: fix-33 — trainingsmoment: ook een andere (oudere) datum kiezen
 // Fix: fix-32 — bijlage echt bewaren en openen; trainingsschema-pdf inlezen in de velden
@@ -62,7 +63,7 @@ import {
   type TrainingVelden,
 } from '@/data/store'
 import { DAGEN, dagVan } from '@/data/rooster'
-import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
+import { gepubliceerdeTrainingen, nogVastTeLeggen, staatIngeroosterd } from '@/data/wijzigingen'
 import { addDays, formatLong, formatShort, startOfWeek, todayISO } from '@/lib/dates'
 import { MAX_BESTAND_KB, maakBijlage, openBijlage, type BijlageData } from '@/lib/bijlage'
 import {
@@ -132,14 +133,7 @@ function TrainingenPagina() {
     return [...map.entries()]
   }, [gefilterd])
 
-  // Mijn trainingen van de afgelopen 2 weken die nog niet zijn vastgelegd
-  const ontbrekend = gepubliceerdeTrainingen(data).filter(
-    (g) =>
-      staatIngeroosterd(g, data.huidigeTrainerId) &&
-      g.training.datum < vandaag &&
-      g.training.datum >= addDays(startOfWeek(vandaag), -7) &&
-      !data.trainingen.some((t) => t.datum === g.training.datum && t.trainerId === data.huidigeTrainerId),
-  )
+  const ontbrekend = nogVastTeLeggen(data, vandaag)
 
   const geselecteerd = data.trainingen.find((t) => t.id === zoek.id) ?? null
   // Wijzigen en verwijderen: wie de training toevoegde of gaf (fix-31); de coördinator mag verwijderen.
