@@ -1,3 +1,4 @@
+// Fix: fix-30 — trainingen: eigen training wijzigen en verwijderen
 // Fix: fix-29 — trainingen: groepen[] (hele groep, op inschrijving of een of meer groepen)
 // Fix: fix-28 — demo-account leest alleen de geanonimiseerde demo_*-collecties.
 // Fix: fix-27 — demo-account: overal lezen, niets wijzigen (behalve feedback sturen).
@@ -455,37 +456,46 @@ service cloud.firestore {
 
     // --- Trainingen ---------------------------------------------------------
 
+    // fix-30: wie een training heeft toegevoegd, mag hem wijzigen en verwijderen.
+    function geldigeTraining(d) {
+      return d.keys().hasOnly([
+             'datum', 'sessieId', 'groepId', 'groepen', 'trainerId', 'titel', 'focus', 'blokken',
+             'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp', 'gewijzigdOp'])
+        && isDatum(d.datum)
+        && tekst(d.sessieId, 40) && d.sessieId.size() > 0
+        && tekst(d.groepId, 40) && d.groepId.size() > 0
+        && (!('groepen' in d) || (
+             d.groepen is list
+             && d.groepen.size() >= 1
+             && d.groepen.size() <= 3
+             && d.groepen.hasOnly(['g-hele', 'g-inschrijving', 'g-basis', 'g-gevorderd', 'g-wedstrijd'])
+             && d.groepen[0] == d.groepId))
+        && d.trainerId is string
+        && exists(trainerPad(d.trainerId))
+        && tekst(d.titel, 200)
+        && d.focus is list && d.focus.size() <= 13
+        && d.blokken is list && d.blokken.size() <= 30
+        && tekst(d.notities, 5000)
+        && (!('bijlage' in d) || tekst(d.bijlage, 255));
+    }
     match /trainingen/{id} {
       allow read: if leest();
       allow create: if isTrainer()
-        && request.resource.data.keys().hasOnly([
-             'datum', 'sessieId', 'groepId', 'groepen', 'trainerId', 'titel', 'focus', 'blokken',
-             'notities', 'bijlage', 'aangemaaktDoor', 'aangemaaktOp'])
-        && isDatum(request.resource.data.datum)
-        && tekst(request.resource.data.sessieId, 40) && request.resource.data.sessieId.size() > 0
-        && tekst(request.resource.data.groepId, 40) && request.resource.data.groepId.size() > 0
-        && (!('groepen' in request.resource.data) || (
-             request.resource.data.groepen is list
-             && request.resource.data.groepen.size() >= 1
-             && request.resource.data.groepen.size() <= 3
-             && request.resource.data.groepen.hasOnly(
-                  ['g-hele', 'g-inschrijving', 'g-basis', 'g-gevorderd', 'g-wedstrijd'])
-             && request.resource.data.groepen[0] == request.resource.data.groepId))
-        && request.resource.data.trainerId is string
-        && exists(trainerPad(request.resource.data.trainerId))
-        && tekst(request.resource.data.titel, 200)
-        && request.resource.data.focus is list && request.resource.data.focus.size() <= 10
-        && request.resource.data.blokken is list && request.resource.data.blokken.size() <= 30
-        && tekst(request.resource.data.notities, 5000)
-        && (!('bijlage' in request.resource.data) || tekst(request.resource.data.bijlage, 255))
+        && geldigeTraining(request.resource.data)
+        && !('gewijzigdOp' in request.resource.data)
         && request.resource.data.aangemaaktDoor == request.auth.uid
         && request.resource.data.aangemaaktOp == request.time;
+      allow update: if isTrainer()
+        && resource.data.aangemaaktDoor == request.auth.uid
+        && geldigeTraining(request.resource.data)
+        && request.resource.data.aangemaaktDoor == resource.data.aangemaaktDoor
+        && request.resource.data.aangemaaktOp == resource.data.aangemaaktOp
+        && request.resource.data.gewijzigdOp == request.time;
+      // Verwijderen: wie hem heeft toegevoegd; de coördinator mag opruimen.
       allow delete: if isTrainer() && (
         resource.data.aangemaaktDoor == request.auth.uid
-        || resource.data.trainerId == request.auth.uid
         || isCoordinator()
       );
-      allow update: if false;
     }
 
     // --- Feedback (fix-16) ----------------------------------------------------

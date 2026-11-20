@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-30 — eigen training wijzigen
  * Fix: fix-29 — trainingen met meerdere groepen
  * Fix: fix-28 — demo-account leest uit de demo_*-collecties (geanonimiseerde kopie).
  * Fix: fix-27 — demo-trainer (staat niet in Firestore) aan de lijst toevoegen.
@@ -24,6 +25,7 @@ import { useSyncExternalStore } from 'react'
 import {
   collection,
   collectionGroup,
+  deleteField,
   deleteDoc,
   doc,
   onSnapshot,
@@ -264,6 +266,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
               blokken: x.blokken ?? [],
               notities: x.notities ?? '',
               bijlage: x.bijlage ?? undefined,
+              aangemaaktDoor: x.aangemaaktDoor ?? undefined,
             }
             return t
           })
@@ -592,7 +595,9 @@ export function herstelRotatie(weekStart: string) {
   batch.commit().catch(meldFout('Rotatie herstellen'))
 }
 
-export function voegTrainingToe(training: Omit<Training, 'id'>) {
+export type TrainingVelden = Omit<Training, 'id' | 'aangemaaktDoor'>
+
+export function voegTrainingToe(training: TrainingVelden) {
   const ref = doc(collection(getDb(), 'trainingen'))
   setDoc(ref, {
     ...training,
@@ -600,6 +605,16 @@ export function voegTrainingToe(training: Omit<Training, 'id'>) {
     aangemaaktOp: serverTimestamp(),
   }).catch(meldFout('Training opslaan'))
   return ref.id
+}
+
+/** Wijzigt een eigen training; de regels staan dit alleen toe aan wie hem toevoegde. */
+export function werkTrainingBij(id: string, training: TrainingVelden) {
+  updateDoc(doc(getDb(), 'trainingen', id), {
+    ...training,
+    // Een weggehaalde bijlage moet ook echt uit het document.
+    bijlage: training.bijlage ?? deleteField(),
+    gewijzigdOp: serverTimestamp(),
+  }).catch(meldFout('Training wijzigen'))
 }
 
 export function verwijderTraining(id: string) {

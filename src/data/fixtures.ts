@@ -1,3 +1,4 @@
+// Fix: fix-30 — training: wie hem toevoegde
 // Fix: fix-29 — trainingen: meerdere groepen (of hele groep / op inschrijving), focus uitgebreid
 // Fix: fix-28 — demo-trainer heeft een vaste id en is een gewone trainer
 // Fix: fix-27 — demo-trainer (alleen kijken)
@@ -218,6 +219,8 @@ export interface Training {
   notities: string
   /** Bestandsnaam van een geüploade training (pdf/foto), indien aanwezig. */
   bijlage?: string
+  /** Wie de training heeft toegevoegd; alleen die mag hem wijzigen (fix-30). */
+  aangemaaktDoor?: string
 }
 
 export interface Periode {

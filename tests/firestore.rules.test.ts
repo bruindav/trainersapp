@@ -1,3 +1,4 @@
+// Fix: fix-30 — training wijzigen en verwijderen door wie hem toevoegde
 // Fix: fix-29 — trainingen met groepen[]
 // Fix: fix-28 — demo-account: alleen de demo_*-kopie lezen
 // Fix: fix-27 — demo-account: alleen lezen (en feedback sturen)
@@ -319,6 +320,26 @@ describe('rooster, trainingen en jaarplan', () => {
     )
     await assertFails(deleteDoc(doc(als(TRAINER), 'trainingen', 't2')))
     await assertSucceeds(deleteDoc(doc(als(HOOFD), 'trainingen', 't2')))
+  })
+  it('wie de training toevoegde mag hem wijzigen; een ander niet, ook niet de gegeven trainer', async () => {
+    await seed(async (db) =>
+      setDoc(doc(db, 'trainingen', 't3'), { ...training(HOOFD.uid), trainerId: TRAINER.uid, aangemaaktOp: null }),
+    )
+    // HOOFD legde hem vast voor TRAINER: TRAINER mag hem niet wijzigen of verwijderen.
+    await assertFails(updateDoc(doc(als(TRAINER), 'trainingen', 't3'), { titel: 'Anders', gewijzigdOp: serverTimestamp() }))
+    await assertFails(deleteDoc(doc(als(TRAINER), 'trainingen', 't3')))
+    // HOOFD wel, maar alleen met gewijzigdOp en zonder de maker of datum van aanmaken te veranderen.
+    await assertSucceeds(
+      updateDoc(doc(als(HOOFD), 'trainingen', 't3'), { titel: 'Anders', groepId: 'g-hele', groepen: ['g-hele'], gewijzigdOp: serverTimestamp() }),
+    )
+    await assertFails(updateDoc(doc(als(HOOFD), 'trainingen', 't3'), { titel: 'Zonder tijd' }))
+    await assertFails(
+      updateDoc(doc(als(HOOFD), 'trainingen', 't3'), { aangemaaktDoor: TRAINER.uid, gewijzigdOp: serverTimestamp() }),
+    )
+    await assertFails(
+      updateDoc(doc(als(HOOFD), 'trainingen', 't3'), { groepen: ['g-onzin'], gewijzigdOp: serverTimestamp() }),
+    )
+    await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 't4'), { ...training(TRAINER.uid), gewijzigdOp: serverTimestamp() }))
   })
   it('alleen coördinator of jaarplanbeheerder wijzigt het jaarplan', async () => {
     await assertFails(setDoc(doc(als(TRAINER), 'jaarplan', 'huidig'), { ...JAARPLAN, versie: 2 }))

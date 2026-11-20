@@ -1,3 +1,4 @@
+// Fix: fix-30 — eigen training wijzigen en (met bevestiging) verwijderen
 // Fix: fix-29 — standaardtitel, meerdere groepen, focus Borstcrawl/Ademhaling/Anders
 // Fix: fix-11 — herinnering en standaardmoment uit het gepubliceerde rooster
 // Fix: fix-3 — alleen wie training geeft is kiesbaar
@@ -8,6 +9,7 @@ import {
   Copy,
   FileUp,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -51,6 +53,8 @@ import {
   useAppData,
   verwijderTraining,
   voegTrainingToe,
+  werkTrainingBij,
+  type TrainingVelden,
 } from '@/data/store'
 import { DAGEN, dagVan } from '@/data/rooster'
 import { gepubliceerdeTrainingen, staatIngeroosterd } from '@/data/wijzigingen'
@@ -60,12 +64,15 @@ import { cn } from '@/lib/utils'
 interface Zoek {
   id?: string
   nieuw?: boolean
+  /** Id van een eigen training die gewijzigd wordt (fix-30). */
+  bewerk?: string
 }
 
 export const Route = createFileRoute('/trainingen')({
   validateSearch: (s: Record<string, unknown>): Zoek => ({
     id: typeof s.id === 'string' ? s.id : undefined,
     nieuw: s.nieuw === true || s.nieuw === 'true' ? true : undefined,
+    bewerk: typeof s.bewerk === 'string' ? s.bewerk : undefined,
   }),
   head: () => ({ meta: [{ title: 'Trainingen · NatUtrecht Trainersapp' }] }),
   component: TrainingenPagina,
@@ -118,7 +125,11 @@ function TrainingenPagina() {
   )
 
   const geselecteerd = data.trainingen.find((t) => t.id === zoek.id) ?? null
-  const formOpen = !!zoek.nieuw
+  // Alleen een training die je zelf hebt toegevoegd kun je wijzigen.
+  const isEigen = (t: Training | null | undefined) => !!t && t.aangemaaktDoor === data.huidigeTrainerId
+  const teBewerken = data.trainingen.find((t) => t.id === zoek.bewerk)
+  const bewerk = isEigen(teBewerken) ? teBewerken! : null
+  const formOpen = !!zoek.nieuw || !!bewerk
   const filtersActief = groep !== 'alle' || trainer !== 'alle' || focus.length > 0 || tekst !== ''
   const km = gefilterd.reduce((n, t) => n + totaalMeters(t), 0) / 1000
 
@@ -290,9 +301,10 @@ function TrainingenPagina() {
 
       <TrainingDetail
         training={geselecteerd}
-        eigen={geselecteerd?.trainerId === data.huidigeTrainerId}
+        eigen={isEigen(geselecteerd)}
         onClose={() => navigate({ search: {} })}
         onHergebruik={(t) => openNieuw(t)}
+        onWijzig={(t) => navigate({ search: { bewerk: t.id } })}
       />
 
       <Dialog
@@ -307,7 +319,9 @@ function TrainingenPagina() {
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           {formOpen && (
             <NieuweTraining
+              key={bewerk?.id ?? 'nieuw'}
               basis={basis}
+              bewerk={bewerk}
               onKlaar={(id) => {
                 setBasis(null)
                 navigate({ search: id ? { id } : {} })
@@ -371,14 +385,26 @@ function TrainingDetail({
   eigen,
   onClose,
   onHergebruik,
+  onWijzig,
 }: {
   training: Training | null
   eigen: boolean
   onClose: () => void
   onHergebruik: (t: Training) => void
+  onWijzig: (t: Training) => void
 }) {
+  // Verwijderen vraagt een tweede klik ter bevestiging.
+  const [zeker, setZeker] = useState(false)
   return (
-    <Sheet open={!!t} onOpenChange={(o) => !o && onClose()}>
+    <Sheet
+      open={!!t}
+      onOpenChange={(o) => {
+        if (!o) {
+          setZeker(false)
+          onClose()
+        }
+      }}
+    >
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         {t && (
           <>
@@ -430,23 +456,35 @@ function TrainingDetail({
               )}
             </div>
             <SheetFooter className="flex-row flex-wrap">
-              <Button onClick={() => onHergebruik(t)}>
+              {eigen && (
+                <Button onClick={() => onWijzig(t)}>
+                  <Pencil /> Wijzigen
+                </Button>
+              )}
+              <Button variant={eigen ? 'outline' : 'default'} onClick={() => onHergebruik(t)}>
                 <Copy /> Gebruik als basis
               </Button>
               {eigen && (
                 <Button
-                  variant="outline"
-                  className="text-destructive"
+                  variant={zeker ? 'destructive' : 'outline'}
+                  className={cn(!zeker && 'text-destructive')}
                   onClick={() => {
+                    if (!zeker) return setZeker(true)
                     verwijderTraining(t.id)
+                    setZeker(false)
                     onClose()
                     toast('Training verwijderd')
                   }}
                 >
-                  <Trash2 /> Verwijderen
+                  <Trash2 /> {zeker ? 'Ja, verwijderen' : 'Verwijderen'}
                 </Button>
               )}
             </SheetFooter>
+            {eigen && zeker && (
+              <p role="alert" className="px-4 pb-4 text-sm text-destructive">
+                Weet je het zeker? Klik nog een keer om de training definitief te verwijderen.
+              </p>
+            )}
           </>
         )}
       </SheetContent>
@@ -460,16 +498,32 @@ function TrainingDetail({
 
 const LEEG_BLOK: TrainingBlok = { onderdeel: 'Kern', omschrijving: '', meters: 0 }
 
-function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (id?: string) => void }) {
+function NieuweTraining({
+  basis: kopie,
+  bewerk,
+  onKlaar,
+}: {
+  basis: Training | null
+  /** Eigen training die gewijzigd wordt (fix-30); anders een nieuwe, eventueel op basis van `basis`. */
+  bewerk?: Training | null
+  onKlaar: (id?: string) => void
+}) {
+  const basis = bewerk ?? kopie
   const data = useAppData()
   const vandaag = todayISO()
   const week = startOfWeek(vandaag)
 
   // Trainingsmomenten van 2 weken terug t/m deze week, nieuwste eerst
-  const momenten = [-14, -7, 0]
+  const recent = [-14, -7, 0]
     .flatMap((d) => SESSIES.map((s) => ({ sessie: s, datum: sessieDatum(addDays(week, d), s) })))
     .filter((m) => m.datum <= vandaag)
     .reverse()
+  // Bij wijzigen staat het eigen moment van de training er altijd in, ook als het ouder is.
+  const eigenSessie = bewerk ? SESSIES.find((s) => s.id === bewerk.sessieId) : undefined
+  const momenten =
+    bewerk && eigenSessie && !recent.some((m) => m.datum === bewerk.datum && m.sessie.id === bewerk.sessieId)
+      ? [{ sessie: eigenSessie, datum: bewerk.datum }, ...recent]
+      : recent
 
   // Het laatste moment waarop ik volgens het gepubliceerde rooster training gaf.
   const mijnGeroosterd = gepubliceerdeTrainingen(data).filter((g) => staatIngeroosterd(g, data.huidigeTrainerId))
@@ -478,9 +532,9 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
   )
 
   const [modus, setModus] = useState<'samenstellen' | 'uploaden'>(basis?.bijlage && !basis.blokken.length ? 'uploaden' : 'samenstellen')
-  const [moment, setMoment] = useState(mijnMoment ? `${mijnMoment.datum}|${mijnMoment.sessie.id}` : (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
+  const [moment, setMoment] = useState(bewerk ? `${bewerk.datum}|${bewerk.sessieId}` : mijnMoment ? `${mijnMoment.datum}|${mijnMoment.sessie.id}` : (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
   const [groepen, setGroepen] = useState<string[]>(basis?.groepen ?? [HELE_GROEP])
-  const [trainerId, setTrainerId] = useState(data.huidigeTrainerId)
+  const [trainerId, setTrainerId] = useState(bewerk?.trainerId ?? data.huidigeTrainerId)
   // De titel volgt het gekozen moment ("Training zondag op 22 november") tot de trainer hem zelf aanpast.
   const basisTitelEigen = !!basis && !/^Training \S+ op /.test(basis.titel)
   const [eigenTitel, setEigenTitel] = useState<string | null>(basisTitelEigen ? basis!.titel : null)
@@ -497,7 +551,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
           { onderdeel: 'Uitzwemmen', omschrijving: 'Rustig naar keuze', meters: 200 },
         ],
   )
-  const [notities, setNotities] = useState('')
+  const [notities, setNotities] = useState(bewerk?.notities ?? '')
   const [bestand, setBestand] = useState<File | null>(null)
   const [uploadMeters, setUploadMeters] = useState('')
   const [poging, setPoging] = useState(false)
@@ -522,7 +576,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
   if (anders && !andersTekst.trim()) fouten.push('Vul in wat de andere focus is, of zet "Anders" uit.')
   if (modus === 'samenstellen' && !blokken.some((b) => b.omschrijving.trim() && b.meters > 0))
     fouten.push('Voeg minstens één onderdeel met omschrijving en meters toe.')
-  if (modus === 'uploaden' && !bestand) fouten.push('Kies een bestand om te uploaden.')
+  if (modus === 'uploaden' && !bestand && !bewerk?.bijlage) fouten.push('Kies een bestand om te uploaden.')
 
   const updateBlok = (i: number, patch: Partial<TrainingBlok>) =>
     setBlokken(blokken.map((b, j) => (j === i ? { ...b, ...patch } : b)))
@@ -537,7 +591,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
         if (fouten.length) return
         const [datum, sessieId] = moment.split('|')
         const meters = Number(uploadMeters)
-        const id = voegTrainingToe({
+        const velden: TrainingVelden = {
           datum,
           sessieId,
           groepId: groepen[0],
@@ -552,15 +606,27 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
               : meters > 0
                 ? [{ onderdeel: 'Kern', omschrijving: 'Zie bijlage', meters }]
                 : [],
-          bijlage: modus === 'uploaden' ? bestand?.name : undefined,
-        })
+          bijlage: modus === 'uploaden' ? (bestand?.name ?? bewerk?.bijlage) : undefined,
+        }
+        if (bewerk) {
+          werkTrainingBij(bewerk.id, velden)
+          toast.success('Training gewijzigd')
+          return onKlaar(bewerk.id)
+        }
+        const id = voegTrainingToe(velden)
         toast.success('Training vastgelegd', { description: 'Je collega’s zien hem nu in het logboek.' })
         onKlaar(id)
       }}
     >
       <DialogHeader>
-        <DialogTitle className="text-xl font-black">{basis ? 'Training op basis van bestaande' : 'Nieuwe training'}</DialogTitle>
-        <DialogDescription>Leg vast wat je hebt gegeven, zodat het hele trainersteam kan meekijken.</DialogDescription>
+        <DialogTitle className="text-xl font-black">
+          {bewerk ? 'Training wijzigen' : basis ? 'Training op basis van bestaande' : 'Nieuwe training'}
+        </DialogTitle>
+        <DialogDescription>
+          {bewerk
+            ? 'Pas aan wat je hebt vastgelegd. Collega’s zien meteen de nieuwe versie.'
+            : 'Leg vast wat je hebt gegeven, zodat het hele trainersteam kan meekijken.'}
+        </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -750,7 +816,9 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
             )}
           >
             <FileUp className="size-8 text-primary" aria-hidden />
-            <span className="font-bold">{bestand ? bestand.name : 'Kies een pdf, foto of Word-bestand'}</span>
+            <span className="font-bold">
+              {bestand ? bestand.name : (bewerk?.bijlage ?? 'Kies een pdf, foto of Word-bestand')}
+            </span>
             <span className="text-xs text-muted-foreground">
               {bestand ? `${Math.max(1, Math.round(bestand.size / 1024))} kB · klik om te vervangen` : 'Bijvoorbeeld een foto van je trainingsbriefje'}
             </span>
@@ -793,7 +861,7 @@ function NieuweTraining({ basis, onKlaar }: { basis: Training | null; onKlaar: (
           Annuleren
         </Button>
         <Button type="submit">
-          <ClipboardPlus /> Training opslaan
+          <ClipboardPlus /> {bewerk ? 'Wijzigingen opslaan' : 'Training opslaan'}
         </Button>
       </DialogFooter>
     </form>

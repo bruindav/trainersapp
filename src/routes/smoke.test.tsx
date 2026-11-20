@@ -1,3 +1,4 @@
+// Fix: fix-30 — eigen training wijzigen
 // Fix: fix-29 — training met groepen
 // Fix: fix-21 — trainingsopbouw, seizoensoverzicht, wedstrijden
 // Fix: fix-20 — help, privacy, disclaimer
@@ -64,6 +65,7 @@ const DATA: AppData = {
       groepen: ['g-basis'],
       trainerId: 'verwijderd',
       titel: 'Lange armen',
+      aangemaaktDoor: 'a',
       focus: ['Techniek'],
       blokken: [{ onderdeel: 'Kern', omschrijving: '4x100', meters: 400 }],
       notities: '',
@@ -183,5 +185,23 @@ describe('Nieuwe training', () => {
     expect(titel.value).toBe('Keerpunten')
     fireEvent.click(screen.getByRole('button', { name: 'Terug naar de standaardtitel' }))
     expect(titel.value).toMatch(/^Training /)
+  })
+})
+
+// Fix: fix-30 — eigen training wijzigen; verwijderen vraagt bevestiging
+describe('Training wijzigen', () => {
+  it('opent de eigen training in het formulier met de bestaande gegevens', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/trainingen?id=t1'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Verwijderen' }))
+    expect(screen.getByRole('button', { name: 'Ja, verwijderen' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Wijzigen' }))
+    expect(await screen.findByRole('heading', { name: 'Training wijzigen' })).toBeInTheDocument()
+    expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Lange armen')
+    expect(screen.getByRole('button', { name: /Wijzigingen opslaan/ })).toBeInTheDocument()
   })
 })
