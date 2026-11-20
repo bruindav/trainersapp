@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-28 — demo-account leest uit de demo_*-collecties (geanonimiseerde kopie).
  * Fix: fix-27 — demo-trainer (staat niet in Firestore) aan de lijst toevoegen.
  * Fix: fix-2 — testtrainers toevoegen/verwijderen.
  * Fix: fix-17 — naam van een teamlid wijzigen.
@@ -73,6 +74,8 @@ import {
 import { volledig, type Indeling, type IndelingMap } from './indeling'
 import { normaliseerJaarplan, zonderUndefined } from './jaarplan'
 import type { LogRegel, LogSoort, Ruilverzoek } from './wijzigingen'
+
+import { DEMO_PREFIX } from './demo-anonimiseer'
 
 /** Pad van het (ene) jaarplan-document. */
 export const JAARPLAN_DOC = ['jaarplan', 'huidig'] as const
@@ -185,6 +188,8 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
   const db = getDb()
   state = leegeData(uid)
   if (demo) state = { ...state, trainers: [demo] }
+  // Het demo-account leest een geanonimiseerde kopie (scripts/maak-demo-data.ts).
+  const c = (naam: string) => (demo ? DEMO_PREFIX + naam : naam)
   syncStatus = 'laden'
   emit()
 
@@ -204,11 +209,11 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
 
   const stops = [
     onSnapshot(
-      collection(db, 'trainers'),
+      collection(db, c('trainers')),
       (snap) => {
         const trainers = snap.docs
           .map((d) => naarTrainer(d.id, d.data()))
-          .concat(demo ? [demo] : [])
+          .concat(demo && !snap.docs.some((d) => d.id === demo.id) ? [demo] : [])
           .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
         setState((s) => ({ ...s, trainers }))
         geladen('trainers')
@@ -216,7 +221,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       fout('trainers'),
     ),
     onSnapshot(
-      collection(db, 'afwezigheden'),
+      collection(db, c('afwezigheden')),
       (snap) => {
         const afwezigheden = snap.docs.map((d) => {
           const x = d.data()
@@ -228,7 +233,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       fout('afwezigheden'),
     ),
     onSnapshot(
-      collection(db, 'roosterWijzigingen'),
+      collection(db, c('roosterWijzigingen')),
       (snap) => {
         const roosterWijzigingen: Record<string, string | null> = {}
         snap.docs.forEach((d) => {
@@ -241,7 +246,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       fout('rooster'),
     ),
     onSnapshot(
-      collection(db, 'trainingen'),
+      collection(db, c('trainingen')),
       (snap) => {
         const trainingen = snap.docs
           .map((d) => {
@@ -267,7 +272,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       fout('trainingen'),
     ),
     onSnapshot(
-      doc(db, ...JAARPLAN_DOC),
+      doc(db, c(JAARPLAN_DOC[0]), JAARPLAN_DOC[1]),
       (snap) => {
         const jaarplan = normaliseerJaarplan(snap.exists() ? snap.data() : undefined)
         setState((s) => ({ ...s, jaarplan }))
@@ -276,7 +281,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       fout('jaarplan'),
     ),
     onSnapshot(
-      collection(db, 'wedstrijden'),
+      collection(db, c('wedstrijden')),
       (snap) => {
         const wedstrijden = snap.docs
           .map((d): Wedstrijd => {
@@ -303,7 +308,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
 
   stops.push(
     onSnapshot(
-      collection(db, 'trainingsmomenten'),
+      collection(db, c('trainingsmomenten')),
       (snap) => {
         const trainingsmomenten = snap.docs
           .map((d) => {
@@ -330,7 +335,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       (err) => console.error('Firestore-listener trainingsmomenten', err),
     ),
     onSnapshot(
-      collection(db, 'roosterperiodes'),
+      collection(db, c('roosterperiodes')),
       (snap) => {
         const roosterperiodes = snap.docs
           .map((d) => {
@@ -357,7 +362,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       (err) => console.error('Firestore-listener roosterperiodes', err),
     ),
     onSnapshot(
-      collectionGroup(db, 'beschikbaarheid'),
+      collectionGroup(db, c('beschikbaarheid')),
       (snap) => {
         const beschikbaarheid: Record<string, Record<string, Beschikbaarheid>> = {}
         snap.docs.forEach((d) => {
@@ -379,7 +384,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
 
   stops.push(
     onSnapshot(
-      collection(db, 'ruilverzoeken'),
+      collection(db, c('ruilverzoeken')),
       (snap) => {
         const ruilverzoeken = snap.docs.map((d) => {
           const x = d.data()
@@ -401,7 +406,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
       (err) => console.error('Firestore-listener ruilverzoeken', err),
     ),
     onSnapshot(
-      collectionGroup(db, 'wijzigingslog'),
+      collectionGroup(db, c('wijzigingslog')),
       (snap) => {
         const wijzigingslog = snap.docs
           .map((d) => {
@@ -426,7 +431,7 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
 
   stops.push(
     onSnapshot(
-      collection(db, 'toezichthouders'),
+      collection(db, c('toezichthouders')),
       (snap) => {
         const toezichthouders = snap.docs
           .map((d) => ({ id: d.id, naam: String(d.data().naam ?? ''), notitie: String(d.data().notitie ?? '') }))

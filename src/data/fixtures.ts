@@ -1,3 +1,4 @@
+// Fix: fix-28 — demo-trainer heeft een vaste id en is een gewone trainer
 // Fix: fix-27 — demo-trainer (alleen kijken)
 // Fix: fix-21 — taak Wedstrijdcoördinator; jaarplan met opbouwen, zones en wedstrijden
 // Fix: fix-17 — namen van testtrainers bijgewerkt
@@ -11,6 +12,7 @@
 import { addDays } from '@/lib/dates'
 import type { Beschikbaarheid, Roosterperiode, Trainingsmoment } from './rooster'
 import type { LogRegel, Ruilverzoek } from './wijzigingen'
+import { DEMO_TRAINER_ID, DEMO_TRAINER_NAAM } from './demo-anonimiseer'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,14 +60,17 @@ export interface Trainer extends Taken {
 /** Demo-account om de app te ontdekken zonder uitnodiging (fix-27). */
 export const DEMO_EMAIL = 'demotrainer@demo.nu'
 
-export function demoTrainer(uid: string): Trainer {
+/**
+ * Het demo-account kijkt rond als trainer DEMO_TRAINER_ID uit de demodata;
+ * deze virtuele versie is alleen een vangnet als die er (nog) niet is.
+ */
+export function demoTrainer(): Trainer {
   return {
-    id: uid,
-    naam: 'Demo-trainer',
+    id: DEMO_TRAINER_ID,
+    naam: DEMO_TRAINER_NAAM,
     initialen: 'DT',
     kleur: '#8966a5',
-    // Niet in de rotatie: het demo-account geeft geen training.
-    rol: 'Geen training',
+    rol: 'Trainer',
     specialiteit: '',
     email: DEMO_EMAIL,
     coordinator: false,

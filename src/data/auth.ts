@@ -1,3 +1,4 @@
+// Fix: fix-28 — demo-account kijkt rond als de demo-trainer uit de demodata
 // Fix: fix-27 — inloggen met het demo-account (alleen kijken)
 // Fix: fix-21 — taak wedstrijdBeheer bij uitnodiging en inrichting
 // Fix: fix-19 — geen uitnodigingslink meer via Firebase (EmailJS + Google-inlog)
@@ -136,7 +137,7 @@ async function bepaalToegang(user: User, mijnGeneratie = generatie) {
   // het alleen lezen toe (en feedback sturen).
   if (isDemoGebruiker(user)) {
     stopTrainerListener?.()
-    zet({ soort: 'ingelogd', user, trainer: demoTrainer(user.uid) })
+    zet({ soort: 'ingelogd', user, trainer: demoTrainer() })
     return
   }
 

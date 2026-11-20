@@ -1,3 +1,4 @@
+// Fix: fix-28 — privacy: demo-account ziet geanonimiseerde kopie
 // Fix: fix-27 — privacy: demo-account
 // Fix: fix-20 — privacyverklaring
 import { createFileRoute } from '@tanstack/react-router'
@@ -70,9 +71,9 @@ function PrivacyPagina() {
           </li>
           <li>De coördinator ziet daarnaast de openstaande uitnodigingen en de feedback.</li>
           <li>
-            Zonder uitnodiging kan niemand inloggen of gegevens zien. Uitzondering is het demo-account: wie daarvan het
-            wachtwoord van de coördinator krijgt, kan hetzelfde zien als een trainer (namen, rooster en
-            beschikbaarheid), maar niets wijzigen.
+            Zonder uitnodiging kan niemand inloggen of gegevens zien. Het demo-account ziet geen echte gegevens, maar een
+            kopie waarin alle namen zijn vervangen door verzonnen namen, e-mailadressen zijn weggelaten en redenen van
+            afwezigheid zijn gewist. Het jaarplan en de trainingen staan er wel in, want die zijn niet persoonlijk.
           </li>
         </ul>
       </section>

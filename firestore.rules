@@ -1,3 +1,4 @@
+// Fix: fix-28 — demo-account leest alleen de geanonimiseerde demo_*-collecties.
 // Fix: fix-27 — demo-account: overal lezen, niets wijzigen (behalve feedback sturen).
 // Fix: fix-21 — wedstrijden, taak wedstrijdBeheer, jaarplan met opbouwen en zones.
 // Fix: fix-16 — feedback: iedereen stuurt, alleen de coördinator leest.
@@ -46,8 +47,9 @@ service cloud.firestore {
         && request.auth.token.email is string
         && request.auth.token.email.lower() == 'demotrainer@demo.nu';
     }
+    // Echte gegevens: alleen trainers. Het demo-account leest de demo_*-kopie (onderaan).
     function leest() {
-      return isTrainer() || isDemo();
+      return isTrainer();
     }
     function ikData() {
       return get(trainerPad(request.auth.uid)).data;
@@ -541,6 +543,21 @@ service cloud.firestore {
         && request.resource.data.doel is bool
         && tekst(request.resource.data.notitie, 1000);
       allow delete: if magWedstrijden();
+    }
+
+
+    // --- Demodata (fix-28) ----------------------------------------------------
+    // Geanonimiseerde kopie, gemaakt door scripts/maak-demo-data.ts (serviceaccount).
+    // Alleen lezen: het demo-account en de coördinator (om te controleren).
+    function leestDemo() { return isDemo() || isCoordinator(); }
+    match /{collectie}/{rest=**} {
+      allow read: if collectie.matches('demo_.*') && leestDemo();
+    }
+    match /{pad=**}/demo_beschikbaarheid/{id} {
+      allow read: if leestDemo();
+    }
+    match /{pad=**}/demo_wijzigingslog/{id} {
+      allow read: if leestDemo();
     }
 
     // Al het overige is dicht.

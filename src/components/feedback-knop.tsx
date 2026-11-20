@@ -1,3 +1,4 @@
+// Fix: fix-28 — feedback staat op naam van het ingelogde account (ook bij het demo-account)
 // Fix: fix-16 — feedbackknop op elk scherm: screenshot + tekst
 import { useLocation } from '@tanstack/react-router'
 import { Camera, MessageSquarePlus } from 'lucide-react'
@@ -18,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MAX_TEKST, maakScreenshot, stuurFeedback } from '@/data/feedback'
 import { trainerById, useAppData } from '@/data/store'
+import { getFirebaseAuth } from '@/lib/firebase'
 
 export function FeedbackKnop() {
   const data = useAppData()
@@ -52,7 +54,8 @@ export function FeedbackKnop() {
         tekst,
         pagina,
         screenshot: meesturen ? screenshot : null,
-        door: ik.id,
+        // Bij het demo-account is ik.id de demo-trainer; de regels eisen de uid.
+        door: getFirebaseAuth().currentUser?.uid ?? ik.id,
         naam: ik.naam,
       })
       toast.success('Bedankt voor je feedback!', { description: 'De coördinator kan hem nu lezen.' })

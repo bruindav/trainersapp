@@ -1,0 +1,47 @@
+# Fix: fix-28 — demodata voor het demo-account: geanonimiseerde kopie van de echte gegevens
+name: Demodata
+
+on:
+  # Elke maandagnacht vernieuwen, zodat de demo het actuele rooster laat zien.
+  schedule:
+    - cron: '17 2 * * 1'
+  # Handmatig starten kan via Actions → Demodata → Run workflow.
+  workflow_dispatch:
+  # En meteen bij een wijziging van het script of de anonimisering.
+  push:
+    paths:
+      - scripts/maak-demo-data.ts
+      - src/data/demo-anonimiseer.ts
+      - .github/workflows/demo-data.yml
+
+concurrency:
+  group: demodata
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  demodata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: firebase-admin installeren (los van de app)
+        run: npm install --prefix "$RUNNER_TEMP/fa" --no-audit --no-fund firebase-admin@13
+      - name: Demodata maken
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::warning::Secret FIREBASE_SERVICE_ACCOUNT ontbreekt; geen demodata."
+            exit 0
+          fi
+          SA="$RUNNER_TEMP/sa.json"
+          trap 'rm -f "$SA"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          export GOOGLE_CLOUD_PROJECT=$(node -e "console.log(require(process.env.GOOGLE_APPLICATION_CREDENTIALS).project_id)")
+          FIREBASE_ADMIN_PAD="$RUNNER_TEMP/fa/" node scripts/maak-demo-data.ts

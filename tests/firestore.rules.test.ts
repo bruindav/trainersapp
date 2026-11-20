@@ -1,3 +1,4 @@
+// Fix: fix-28 — demo-account: alleen de demo_*-kopie lezen
 // Fix: fix-27 — demo-account: alleen lezen (en feedback sturen)
 // Fix: fix-15 — regels voor ritmeWeken
 // Fix: fix-12 — regels voor vaste trainers en geldigheid van momenten
@@ -14,7 +15,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { FieldPath, deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
+import { FieldPath, collectionGroup, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
 let env: RulesTestEnvironment
@@ -568,9 +569,34 @@ describe('demo-account', () => {
       .authenticatedContext(DEMO.uid, { email, email_verified: false, firebase: { sign_in_provider: provider } } as never)
       .firestore()
 
-  it('kan lezen, zonder geverifieerd e-mailadres', async () => {
-    await assertSucceeds(getDoc(doc(alsDemo(), 'jaarplan', 'huidig')))
-    await assertSucceeds(getDoc(doc(alsDemo(), 'trainers', HOOFD.uid)))
+  async function demoData() {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'demo_jaarplan', 'huidig'), JAARPLAN)
+      await setDoc(doc(db, 'demo_trainers', 'demo-trainer'), trainerDoc('Demo Trainer', 'Trainer', ''))
+      await setDoc(doc(db, 'demo_roosterperiodes', 'p1', 'demo_beschikbaarheid', 'demo-trainer'), { keuzes: {} })
+      await setDoc(doc(db, 'demo_roosterperiodes', 'p1', 'demo_wijzigingslog', 'l1'), { tekst: 'x' })
+    })
+  }
+
+  it('leest de demodata, zonder geverifieerd e-mailadres', async () => {
+    await demoData()
+    await assertSucceeds(getDoc(doc(alsDemo(), 'demo_jaarplan', 'huidig')))
+    await assertSucceeds(getDoc(doc(alsDemo(), 'demo_trainers', 'demo-trainer')))
+    await assertSucceeds(getDocs(collectionGroup(alsDemo(), 'demo_beschikbaarheid')))
+    await assertSucceeds(getDocs(collectionGroup(alsDemo(), 'demo_wijzigingslog')))
+  })
+  it('leest de echte gegevens niet', async () => {
+    await assertFails(getDoc(doc(alsDemo(), 'jaarplan', 'huidig')))
+    await assertFails(getDoc(doc(alsDemo(), 'trainers', HOOFD.uid)))
+    await assertFails(getDocs(collectionGroup(alsDemo(), 'beschikbaarheid')))
+  })
+  it('demodata: coördinator mag meekijken, een gewone trainer en een vreemde niet; niemand schrijft', async () => {
+    await demoData()
+    await assertSucceeds(getDoc(doc(als(HOOFD), 'demo_trainers', 'demo-trainer')))
+    await assertFails(getDoc(doc(als(TRAINER), 'demo_trainers', 'demo-trainer')))
+    await assertFails(getDoc(doc(als({ uid: 'vreemd', email: 'vreemd@x.nl' }), 'demo_trainers', 'demo-trainer')))
+    await assertFails(setDoc(doc(alsDemo(), 'demo_trainers', 'x'), { naam: 'x' }))
+    await assertFails(setDoc(doc(als(HOOFD), 'demo_trainers', 'x'), { naam: 'x' }))
   })
   it('kan niets opslaan', async () => {
     const db = alsDemo()
@@ -594,7 +620,8 @@ describe('demo-account', () => {
     await assertFails(getDoc(doc(alsDemo(), 'feedback', 'd1')))
   })
   it('alleen met wachtwoord en het demo-adres', async () => {
-    await assertFails(getDoc(doc(alsDemo('google.com'), 'jaarplan', 'huidig')))
-    await assertFails(getDoc(doc(alsDemo('password', 'ander@demo.nu'), 'jaarplan', 'huidig')))
+    await demoData()
+    await assertFails(getDoc(doc(alsDemo('google.com'), 'demo_jaarplan', 'huidig')))
+    await assertFails(getDoc(doc(alsDemo('password', 'ander@demo.nu'), 'demo_jaarplan', 'huidig')))
   })
 })
