@@ -1,3 +1,4 @@
+// Fix: fix-33 — trainingsmoment: ook een andere (oudere) datum kiezen
 // Fix: fix-32 — bijlage echt bewaren en openen; trainingsschema-pdf inlezen in de velden
 // Fix: fix-31 — ook wie de training gaf mag wijzigen/verwijderen; coördinator verwijdert
 // Fix: fix-30 — eigen training wijzigen en (met bevestiging) verwijderen
@@ -500,6 +501,8 @@ function TrainingDetail({
 // Nieuwe training (samenstellen of uploaden)
 // ---------------------------------------------------------------------------
 
+const ANDERE_DATUM = 'andere-datum'
+
 const LEEG_BLOK: TrainingBlok = { onderdeel: 'Kern', omschrijving: '', meters: 0 }
 
 function NieuweTraining({
@@ -539,6 +542,19 @@ function NieuweTraining({
   )
 
   const [modus, setModus] = useState<'samenstellen' | 'uploaden'>(basis?.bijlage && !basis.blokken.length ? 'uploaden' : 'samenstellen')
+  // fix-33: naast de recente momenten ook een oudere datum kunnen kiezen.
+  const [andereDatum, setAndereDatum] = useState(false)
+  const [datumFout, setDatumFout] = useState('')
+  const kiesAndereDatum = (datum: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return setDatumFout('')
+    if (datum > vandaag) return setDatumFout('Kies een datum die al geweest is.')
+    const s = SESSIES.find((x) => x.dagIndex === dagVan(datum))
+    if (!s) return setDatumFout(`Op ${DAGEN[dagVan(datum)]} is er geen training. Kies een dinsdag, donderdag of zondag.`)
+    setDatumFout('')
+    setExtraMoment({ sessie: s, datum })
+    setMoment(`${datum}|${s.id}`)
+    setAndereDatum(false)
+  }
   const [moment, setMoment] = useState(bewerk ? `${bewerk.datum}|${bewerk.sessieId}` : mijnMoment ? `${mijnMoment.datum}|${mijnMoment.sessie.id}` : (momenten[0] ? `${momenten[0].datum}|${momenten[0].sessie.id}` : ''))
   const [groepen, setGroepen] = useState<string[]>(basis?.groepen ?? [HELE_GROEP])
   const [trainerId, setTrainerId] = useState(bewerk?.trainerId ?? data.huidigeTrainerId)
@@ -714,7 +730,14 @@ function NieuweTraining({
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-moment">Trainingsmoment</Label>
-          <Select value={moment} onValueChange={setMoment}>
+          <Select
+            value={moment}
+            onValueChange={(v) => {
+              if (v === ANDERE_DATUM) return setAndereDatum(true)
+              setAndereDatum(false)
+              setMoment(v)
+            }}
+          >
             <SelectTrigger id="n-moment" className="w-full">
               <SelectValue placeholder="Kies moment" />
             </SelectTrigger>
@@ -724,8 +747,28 @@ function NieuweTraining({
                   {m.sessie.dag} {formatShort(m.datum)} · {m.sessie.start}
                 </SelectItem>
               ))}
+              <SelectItem value={ANDERE_DATUM}>Andere datum kiezen…</SelectItem>
             </SelectContent>
           </Select>
+          {andereDatum && (
+            <div className="space-y-1">
+              <Label htmlFor="n-datum" className="text-xs">
+                Datum van de training
+              </Label>
+              <Input
+                id="n-datum"
+                type="date"
+                max={vandaag}
+                autoFocus
+                aria-describedby="n-datum-hulp"
+                aria-invalid={!!datumFout}
+                onChange={(e) => kiesAndereDatum(e.target.value)}
+              />
+              <p id="n-datum-hulp" className={cn('text-xs', datumFout ? 'text-destructive' : 'text-muted-foreground')}>
+                {datumFout || 'Een dinsdag, donderdag of zondag, ook van langer geleden.'}
+              </p>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="n-trainer">Gegeven door</Label>

@@ -234,3 +234,29 @@ describe('Trainingsschema uploaden', () => {
     expect(screen.getByText(/Bijlage: training-15-november\.pdf/)).toBeInTheDocument()
   })
 })
+
+// Fix: fix-33 — een oudere datum kiezen bij een nieuwe training
+describe('Andere datum kiezen', () => {
+  // Radix Select gebruikt pointer capture en scrollIntoView; jsdom kent die niet.
+  Element.prototype.hasPointerCapture ??= () => false
+  Element.prototype.releasePointerCapture ??= () => {}
+  Element.prototype.scrollIntoView ??= () => {}
+  it('voegt een oudere zondag toe aan de momenten en weigert een maandag', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const userEvent = (await import('@testing-library/user-event')).default
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/trainingen?nieuw=true'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Trainingsmoment' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Andere datum kiezen…' }))
+    const datum = await screen.findByLabelText('Datum van de training')
+    fireEvent.change(datum, { target: { value: '2026-09-07' } })
+    expect(screen.getByText(/Op maandag is er geen training/)).toBeInTheDocument()
+    fireEvent.change(datum, { target: { value: '2026-09-06' } })
+    expect(screen.queryByLabelText('Datum van de training')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Trainingsmoment' })).toHaveTextContent(/Zondag .*6 sep/i)
+    expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Training zondag op 6 september')
+  })
+})
