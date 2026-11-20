@@ -1,3 +1,4 @@
+// Fix: fix-35 — help: onderdelen verslepen
 // Fix: fix-32 — help: bijlagen en trainingsschema inlezen
 // Fix: fix-28 — help: demo met verzonnen namen
 // Fix: fix-27 — help: demo-account
@@ -140,6 +141,10 @@ function HelpPagina() {
             dan al ingevuld.
           </li>
           <li>Een training die jij toevoegde of gaf, kun je wijzigen en verwijderen.</li>
+          <li>
+            De volgorde van de onderdelen pas je aan door een onderdeel aan het handvat (⋮⋮) te verslepen, of met Omhoog en
+            Omlaag.
+          </li>
         </ul>
       </section>
 

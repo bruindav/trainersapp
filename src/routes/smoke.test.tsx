@@ -269,3 +269,25 @@ describe('Andere datum kiezen', () => {
     expect((screen.getByLabelText('Titel') as HTMLInputElement).value).toBe('Training zondag op 6 september')
   })
 })
+
+// Fix: fix-35 — volgorde van onderdelen wijzigen
+describe('Onderdelen verplaatsen', () => {
+  it('omhoog en omlaag verplaatst het onderdeel met zijn invoer', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/trainingen?nieuw=true'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    const naam = (i: number) => (screen.getByLabelText(`Onderdeel ${i}`) as HTMLInputElement).value
+    await screen.findByLabelText('Onderdeel 1')
+    expect([naam(1), naam(2), naam(3)]).toEqual(['Inzwemmen', '', 'Uitzwemmen'])
+    fireEvent.change(screen.getByLabelText('Onderdeel 2'), { target: { value: 'Kern' } })
+    fireEvent.click(screen.getByRole('button', { name: /Onderdeel 3 Omhoog/ }))
+    expect([naam(1), naam(2), naam(3)]).toEqual(['Inzwemmen', 'Uitzwemmen', 'Kern'])
+    fireEvent.click(screen.getByRole('button', { name: /Onderdeel 1 Omlaag/ }))
+    expect([naam(1), naam(2), naam(3)]).toEqual(['Uitzwemmen', 'Inzwemmen', 'Kern'])
+    expect(screen.getByRole('button', { name: /Onderdeel 1 Omhoog/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Onderdeel 2 verslepen' })).toBeInTheDocument()
+  })
+})

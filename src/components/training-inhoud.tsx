@@ -1,5 +1,32 @@
+// Fix: fix-35 — onderdelen verslepen (en omhoog/omlaag) om de volgorde te wijzigen
 // Fix: fix-34 — training in dezelfde opbouw als het trainingsschema: invoer en weergave
-import { ListChecks, Plus, Rows3, X } from 'lucide-react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Modifier,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
+  ArrowDown,
+  ArrowUp,
+  GripVertical,
+  ListChecks,
+  Plus,
+  Rows3,
+  X,
+} from 'lucide-react'
+import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,9 +62,18 @@ export function alsSchemaBlok(b: TrainingBlok): TrainingBlok {
 
 const getal = (n: number) => n.toLocaleString('nl-NL')
 
+/** Alleen verticaal slepen (zonder extra pakket @dnd-kit/modifiers). */
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({
+  ...transform,
+  x: 0,
+})
+
 // ---------------------------------------------------------------------------
 // Invoer
 // ---------------------------------------------------------------------------
+
+let volgnummer = 0
+const nieuwId = () => `o${++volgnummer}`
 
 export function OnderdelenInvoer({
   blokken,
@@ -50,92 +86,91 @@ export function OnderdelenInvoer({
   totaalToelichting: string
   onTotaalToelichting: (t: string) => void
 }) {
+  // fix-35: vaste sleutels per onderdeel, zodat slepen en invoer goed blijven gaan.
+  // Ze lopen gelijk op met de blokken; komt er van buiten een hele nieuwe lijst
+  // (bv. een ingelezen schema), dan krijgen alle onderdelen nieuwe sleutels.
+  const [sleutels, setSleutels] = useState<string[]>(() => blokken.map(nieuwId))
+  if (sleutels.length !== blokken.length) setSleutels(blokken.map(nieuwId))
+  const ids =
+    sleutels.length === blokken.length
+      ? sleutels
+      : blokken.map((_, i) => `tijdelijk-${i}`)
+
   const zet = (i: number, patch: Partial<TrainingBlok>) =>
     onChange(blokken.map((b, j) => (j === i ? { ...b, ...patch } : b)))
+  const verplaats = (van: number, naar: number) => {
+    if (naar < 0 || naar >= blokken.length || van === naar) return
+    setSleutels(arrayMove(ids, van, naar))
+    onChange(arrayMove(blokken, van, naar))
+  }
+  const verwijder = (i: number) => {
+    setSleutels(ids.filter((_, j) => j !== i))
+    onChange(blokken.filter((_, j) => j !== i))
+  }
+  const voegToe = () => {
+    setSleutels([...ids, nieuwId()])
+    onChange([...blokken, { ...LEEG_ONDERDEEL }])
+  }
+
+  // Slepen kan alleen aan het handvat (touch-none), dus met pointer-events werkt het
+  // met muis én vinger zonder het scrollen van de pagina te hinderen.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
   const meters = blokken.reduce((n, b) => n + (b.meters || 0), 0)
   const minuten = blokken.reduce((n, b) => n + minutenVan(b.tijd), 0)
 
   return (
     <div className="space-y-3">
-      <ol className="space-y-3">
-        {blokken.map((b, i) => (
-          <li key={i} className="space-y-2 rounded-lg border bg-card p-3">
-            <div className="flex items-center gap-2">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                {i + 1}
-              </span>
-              <Input
-                value={b.naam ?? ''}
-                onChange={(e) =>
-                  zet(i, {
-                    naam: e.target.value,
-                    onderdeel: onderdeelVan(e.target.value),
-                  })
-                }
-                placeholder="Onderdeel, bv. Inzwemmen"
-                aria-label={`Onderdeel ${i + 1}`}
-                className="font-semibold"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onChange(blokken.filter((_, j) => j !== i))}
-                disabled={blokken.length === 1}
-                aria-label={`Verwijder onderdeel ${i + 1}`}
-              >
-                <X />
-              </Button>
-            </div>
-            <div className="grid grid-cols-[1fr_6rem] gap-2 pl-8">
-              <div>
-                <Input
-                  value={b.afstand ?? ''}
-                  onChange={(e) =>
-                    zet(i, {
-                      afstand: e.target.value,
-                      meters: leesMeters(e.target.value),
-                    })
-                  }
-                  placeholder="Afstand, bv. 4 x 100 m"
-                  aria-label={`Afstand onderdeel ${i + 1}`}
-                />
-                <p
-                  className="mt-0.5 text-[11px] text-muted-foreground"
-                  aria-live="polite"
-                >
-                  {b.meters
-                    ? `= ${getal(b.meters)} m`
-                    : b.afstand
-                      ? 'Geen meters herkend; schrijf bv. "4 x 100 m"'
-                      : ' '}
-                </p>
-              </div>
-              <Input
-                value={b.tijd ?? ''}
-                onChange={(e) => zet(i, { tijd: e.target.value })}
-                placeholder="Tijd, 8 min"
-                aria-label={`Tijd onderdeel ${i + 1}`}
-              />
-            </div>
-            <div className="pl-8">
-              <Textarea
-                rows={2}
-                value={b.omschrijving}
-                onChange={(e) => zet(i, { omschrijving: e.target.value })}
-                placeholder="Invulling, bv. 200 vrij, daarna 4 x 50 wisselslag. Rust 10 sec."
-                aria-label={`Invulling onderdeel ${i + 1}`}
-              />
-            </div>
-          </li>
-        ))}
-      </ol>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => onChange([...blokken, { ...LEEG_ONDERDEEL }])}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis]}
+        accessibility={{
+          screenReaderInstructions: {
+            draggable:
+              'Druk op spatie om het onderdeel op te pakken, gebruik de pijltjes om te verplaatsen en spatie om los te laten.',
+          },
+          announcements: {
+            onDragStart: ({ active }) =>
+              `Onderdeel ${ids.indexOf(String(active.id)) + 1} opgepakt.`,
+            onDragOver: ({ over }) =>
+              over ? `Naar plek ${ids.indexOf(String(over.id)) + 1}.` : '',
+            onDragEnd: ({ over }) =>
+              over
+                ? `Neergezet op plek ${ids.indexOf(String(over.id)) + 1}.`
+                : 'Neergezet.',
+            onDragCancel: () => 'Verplaatsen geannuleerd.',
+          },
+        }}
+        onDragEnd={({ active, over }) => {
+          if (!over) return
+          verplaats(
+            ids.indexOf(String(active.id)),
+            ids.indexOf(String(over.id)),
+          )
+        }}
       >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <ol className="space-y-3">
+            {blokken.map((b, i) => (
+              <OnderdeelKaart
+                key={ids[i]}
+                id={ids[i]}
+                blok={b}
+                nummer={i + 1}
+                aantal={blokken.length}
+                onZet={(patch) => zet(i, patch)}
+                onVerwijder={() => verwijder(i)}
+                onOmhoog={() => verplaats(i, i - 1)}
+                onOmlaag={() => verplaats(i, i + 1)}
+              />
+            ))}
+          </ol>
+        </SortableContext>
+      </DndContext>
+      <Button type="button" variant="outline" size="sm" onClick={voegToe}>
         <Plus /> Onderdeel toevoegen
       </Button>
 
@@ -154,6 +189,149 @@ export function OnderdelenInvoer({
         />
       </div>
     </div>
+  )
+}
+
+function OnderdeelKaart({
+  id,
+  blok: b,
+  nummer,
+  aantal,
+  onZet,
+  onVerwijder,
+  onOmhoog,
+  onOmlaag,
+}: {
+  id: string
+  blok: TrainingBlok
+  nummer: number
+  aantal: number
+  onZet: (patch: Partial<TrainingBlok>) => void
+  onVerwijder: () => void
+  onOmhoog: () => void
+  onOmlaag: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        'relative space-y-2 rounded-lg border bg-card p-3',
+        isDragging &&
+          'z-10 shadow-lg ring-2 ring-primary motion-reduce:transition-none',
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`Onderdeel ${nummer} verslepen`}
+          className="-ml-1 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
+        >
+          <GripVertical className="size-4" aria-hidden />
+        </button>
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">
+          {nummer}
+        </span>
+        <Input
+          value={b.naam ?? ''}
+          onChange={(e) =>
+            onZet({
+              naam: e.target.value,
+              onderdeel: onderdeelVan(e.target.value),
+            })
+          }
+          placeholder="Onderdeel, bv. Inzwemmen"
+          aria-label={`Onderdeel ${nummer}`}
+          className="font-semibold"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onVerwijder}
+          disabled={aantal === 1}
+          aria-label={`Verwijder onderdeel ${nummer}`}
+        >
+          <X />
+        </Button>
+      </div>
+      <div className="grid grid-cols-[1fr_6rem] gap-2 pl-[3.75rem]">
+        <div>
+          <Input
+            value={b.afstand ?? ''}
+            onChange={(e) =>
+              onZet({
+                afstand: e.target.value,
+                meters: leesMeters(e.target.value),
+              })
+            }
+            placeholder="Afstand, bv. 4 x 100 m"
+            aria-label={`Afstand onderdeel ${nummer}`}
+          />
+          <p
+            className="mt-0.5 text-[11px] text-muted-foreground"
+            aria-live="polite"
+          >
+            {b.meters
+              ? `= ${getal(b.meters)} m`
+              : b.afstand
+                ? 'Geen meters herkend; schrijf bv. "4 x 100 m"'
+                : ' '}
+          </p>
+        </div>
+        <Input
+          value={b.tijd ?? ''}
+          onChange={(e) => onZet({ tijd: e.target.value })}
+          placeholder="Tijd, 8 min"
+          aria-label={`Tijd onderdeel ${nummer}`}
+        />
+      </div>
+      <div className="pl-[3.75rem]">
+        <Textarea
+          rows={2}
+          value={b.omschrijving}
+          onChange={(e) => onZet({ omschrijving: e.target.value })}
+          placeholder="Invulling, bv. 200 vrij, daarna 4 x 50 wisselslag. Rust 10 sec."
+          aria-label={`Invulling onderdeel ${nummer}`}
+        />
+      </div>
+      {aantal > 1 && (
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onOmhoog}
+            disabled={nummer === 1}
+          >
+            <ArrowUp /> <span className="sr-only">Onderdeel {nummer}</span>{' '}
+            Omhoog
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onOmlaag}
+            disabled={nummer === aantal}
+          >
+            <ArrowDown /> <span className="sr-only">Onderdeel {nummer}</span>{' '}
+            Omlaag
+          </Button>
+        </div>
+      )}
+    </li>
   )
 }
 
