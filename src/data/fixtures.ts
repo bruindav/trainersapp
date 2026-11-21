@@ -1,3 +1,4 @@
+// Fix: fix-37 — AppData: overleggen
 // Fix: fix-34 — training volgens het trainingsschema: opzet, doel, onderdelen met afstand/tijd, per baan, aandachtspunten
 // Fix: fix-30 — training: wie hem toevoegde
 // Fix: fix-29 — trainingen: meerdere groepen (of hele groep / op inschrijving), focus uitgebreid
@@ -16,6 +17,7 @@ import { addDays } from '@/lib/dates'
 import type { Beschikbaarheid, Roosterperiode, Trainingsmoment } from './rooster'
 import type { LogRegel, Ruilverzoek } from './wijzigingen'
 import { DEMO_TRAINER_ID, DEMO_TRAINER_NAAM } from './demo-anonimiseer'
+import type { Overleg } from './overleg'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -583,4 +585,6 @@ export interface AppData {
   trainingen: Training[]
   jaarplan: Jaarplan
   wedstrijden: Wedstrijd[]
+  /** Trainersoverleggen (fix-37), nieuwste eerst. */
+  overleggen: Overleg[]
 }

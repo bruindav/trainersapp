@@ -1,3 +1,4 @@
+// Fix: fix-37 — AppData met overleggen
 // Fix: fix-30 — eigen training wijzigen
 // Fix: fix-29 — training met groepen
 // Fix: fix-21 — trainingsopbouw, seizoensoverzicht, wedstrijden
@@ -9,7 +10,7 @@
 // Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-1 — rooktest: elke pagina rendert met data uit de (gemockte) store
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -73,6 +74,7 @@ const DATA: AppData = {
   ],
   jaarplan: STANDAARD_JAARPLAN,
   wedstrijden: [],
+  overleggen: [],
 }
 
 vi.mock('@/data/feedback', async (orig) => ({
@@ -289,5 +291,51 @@ describe('Onderdelen verplaatsen', () => {
     expect([naam(1), naam(2), naam(3)]).toEqual(['Uitzwemmen', 'Inzwemmen', 'Kern'])
     expect(screen.getByRole('button', { name: /Onderdeel 1 Omhoog/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Onderdeel 2 verslepen' })).toBeInTheDocument()
+  })
+})
+
+// Fix: fix-37 — trainersoverleg
+describe('Trainersoverleg', () => {
+  it('lege pagina verwijst naar het voorbeeld', async () => {
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/overleg'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    expect(await screen.findByRole('heading', { name: 'Trainersoverleg', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Bekijk een voorbeeld/ })).toHaveAttribute('href', '/overleg/voorbeeld')
+  })
+
+  it('voorbeeld toont afspraken per onderwerp, acties en data, zonder te bewerken', async () => {
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/overleg/voorbeeld'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    expect(await screen.findByText(/Dit is een voorbeeld/)).toBeInTheDocument()
+    const afspraken = screen.getByRole('region', { name: 'Afspraken' })
+    for (const onderwerp of ['Toezicht', 'Workshops', 'Uitrusting', 'Baanindeling', 'Badgebruik', 'Wedstrijden'])
+      expect(within(afspraken).getByRole('heading', { name: onderwerp })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Veranderde handhaving toezichthouders/ })).toBeInTheDocument()
+    expect(screen.getAllByText(/^Actie /).length).toBeGreaterThan(5)
+    expect(screen.getByRole('heading', { name: /Belangrijke data/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Wijzigen/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /goedkeuren/i })).not.toBeInTheDocument()
+  })
+
+  it('formulier: nieuw overleg met agendapunt, actie en afspraak', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/overleg'] }) })
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+      await router.load()
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Overleg vastleggen/ }))
+    expect(await screen.findByRole('heading', { name: 'Trainersoverleg vastleggen' })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Agendapunt 1'), 'Toezicht')
+    await userEvent.click(screen.getByRole('button', { name: /^Actie$/ }))
+    expect(screen.getByLabelText('Wie, actie 1 van punt 1')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Afspraak toevoegen/ }))
+    expect(screen.getByLabelText('Onderwerp afspraak 1')).toBeInTheDocument()
   })
 })

@@ -1,3 +1,4 @@
+// Fix: fix-37 — AppData met overleggen
 // Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen en taken in testdata
 // Fix: fix-2 — testtrainer-id's
@@ -26,6 +27,7 @@ function data(over: Partial<AppData> = {}): AppData {
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
     wedstrijden: [],
+    overleggen: [],
     ...over,
   }
 }

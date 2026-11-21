@@ -1,3 +1,4 @@
+// Fix: fix-37 — AppData met overleggen
 // Fix: fix-36 — nogVastTeLeggen
 // Fix: fix-11 — gepubliceerde trainingen en wie een open plek mag overnemen
 import { describe, expect, it } from 'vitest'
@@ -31,6 +32,7 @@ const data = (status: 'indelen' | 'gepubliceerd'): AppData => ({
   trainingen: [],
   jaarplan: { ...STANDAARD_JAARPLAN, evenementen: [] },
   wedstrijden: [],
+  overleggen: [],
 })
 
 describe('gepubliceerdeTrainingen', () => {

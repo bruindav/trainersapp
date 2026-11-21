@@ -1,3 +1,4 @@
+// Fix: fix-37 — trainersoverleg (overleggen, overlegBijlagen)
 // Fix: fix-34 — trainingen: opzet, doel, toelichtingen, per baan, aandachtspunten
 // Fix: fix-32 — bijlagen: het bestand bij een training
 // Fix: fix-31 — trainingen: ook wie de training gaf mag wijzigen en verwijderen
@@ -533,6 +534,78 @@ service cloud.firestore {
         || get(trainingPad(id)).data.aangemaaktDoor == request.auth.uid
         || get(trainingPad(id)).data.trainerId == request.auth.uid
         || isCoordinator()
+      );
+    }
+
+    // --- Trainersoverleg (fix-37) ---------------------------------------------
+    // Iedere trainer kan een overleg vastleggen (als concept). Wijzigen: wie het
+    // vastlegde zolang het concept is, of de coördinator. Goedkeuren: alleen de coördinator.
+    function geldigOverleg(d) {
+      return d.keys().hasOnly([
+             'datum', 'titel', 'status', 'aanwezig', 'gasten', 'punten', 'afspraken', 'belangrijkeData',
+             'bijlage', 'aangemaaktDoor', 'aangemaaktOp', 'gewijzigdOp', 'goedgekeurdDoor', 'goedgekeurdOp'])
+        && isDatum(d.datum)
+        && tekst(d.titel, 200) && d.titel.size() > 0
+        && d.status in ['concept', 'goedgekeurd']
+        && tekst(d.aanwezig, 1000)
+        && tekst(d.gasten, 500)
+        && d.punten is list && d.punten.size() <= 30
+        && d.afspraken is list && d.afspraken.size() <= 50
+        && d.belangrijkeData is list && d.belangrijkeData.size() <= 30
+        && (!('bijlage' in d) || tekst(d.bijlage, 255));
+    }
+    function overlegPad(id) { return /databases/$(database)/documents/overleggen/$(id); }
+    function magOverlegWijzigen(o) {
+      return isCoordinator() || (o.status == 'concept' && o.aangemaaktDoor == request.auth.uid);
+    }
+    match /overleggen/{id} {
+      allow read: if leest();
+      allow create: if isTrainer()
+        && geldigOverleg(request.resource.data)
+        && request.resource.data.status == 'concept'
+        && !('gewijzigdOp' in request.resource.data)
+        && !('goedgekeurdDoor' in request.resource.data)
+        && !('goedgekeurdOp' in request.resource.data)
+        && request.resource.data.aangemaaktDoor == request.auth.uid
+        && request.resource.data.aangemaaktOp == request.time;
+      allow update: if isTrainer()
+        && magOverlegWijzigen(resource.data)
+        && geldigOverleg(request.resource.data)
+        && request.resource.data.aangemaaktDoor == resource.data.aangemaaktDoor
+        && request.resource.data.aangemaaktOp == resource.data.aangemaaktOp
+        && request.resource.data.gewijzigdOp == request.time
+        && (
+          // Status blijft gelijk (en dus ook wie goedkeurde) ...
+          (request.resource.data.status == resource.data.status
+            && request.resource.data.get('goedgekeurdDoor', null) == resource.data.get('goedgekeurdDoor', null)
+            && request.resource.data.get('goedgekeurdOp', null) == resource.data.get('goedgekeurdOp', null))
+          // ... of de coördinator keurt goed.
+          || (isCoordinator()
+            && resource.data.status == 'concept'
+            && request.resource.data.status == 'goedgekeurd'
+            && request.resource.data.goedgekeurdDoor == request.auth.uid
+            && request.resource.data.goedgekeurdOp == request.time)
+        );
+      allow delete: if isTrainer() && magOverlegWijzigen(resource.data);
+    }
+    // De notulen als bestand (data-URL, max. ~1 MB), zelfde rechten als het overleg.
+    match /overlegBijlagen/{id} {
+      allow read: if leest();
+      allow create, update: if isTrainer()
+        && existsAfter(overlegPad(id))
+        && (isCoordinator()
+            || (getAfter(overlegPad(id)).data.status == 'concept'
+                && getAfter(overlegPad(id)).data.aangemaaktDoor == request.auth.uid))
+        && request.resource.data.keys().hasOnly(['naam', 'type', 'data', 'door', 'op'])
+        && request.resource.data.keys().hasAll(['naam', 'type', 'data', 'door', 'op'])
+        && tekst(request.resource.data.naam, 255) && request.resource.data.naam.size() > 0
+        && tekst(request.resource.data.type, 100)
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 1000000
+        && request.resource.data.door == request.auth.uid
+        && request.resource.data.op == request.time;
+      allow delete: if isTrainer() && (
+        !exists(overlegPad(id)) || magOverlegWijzigen(get(overlegPad(id)).data)
       );
     }
 

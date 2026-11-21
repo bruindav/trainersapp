@@ -1,5 +1,6 @@
 /**
  * Fix: fix-1 — client-store bovenop Firestore.
+ * Fix: fix-37 — trainersoverleg: listener en acties
  * Fix: fix-34 — nieuwe trainingsvelden inlezen
  * Fix: fix-32 — bijlage (het bestand zelf) bij een training bewaren
  * Fix: fix-30 — eigen training wijzigen
@@ -82,6 +83,7 @@ import type { LogRegel, LogSoort, Ruilverzoek } from './wijzigingen'
 
 import type { BijlageData } from '@/lib/bijlage'
 import { DEMO_PREFIX } from './demo-anonimiseer'
+import { naarOverleg, type Overleg, type OverlegVelden } from './overleg'
 
 /** Pad van het (ene) jaarplan-document. */
 export const JAARPLAN_DOC = ['jaarplan', 'huidig'] as const
@@ -102,6 +104,7 @@ function leegeData(uid = ''): AppData {
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
     wedstrijden: [],
+    overleggen: [],
   }
 }
 
@@ -317,6 +320,16 @@ export function startSync(uid: string, magTeam: boolean, demo?: Trainer): () => 
         setState((s) => ({ ...s, wedstrijden }))
       },
       (err) => console.error('Firestore-listener wedstrijden', err),
+    ),
+    onSnapshot(
+      collection(db, c('overleggen')),
+      (snap) => {
+        const overleggen = snap.docs
+          .map((d) => naarOverleg(d.id, d.data()))
+          .sort((a, b) => b.datum.localeCompare(a.datum))
+        setState((s) => ({ ...s, overleggen }))
+      },
+      (err) => console.error('Firestore-listener overleggen', err),
     ),
   ]
 
@@ -708,6 +721,59 @@ export async function bewaarWedstrijd(w: Wedstrijd) {
   const { id, ...rest } = w
   const ref = id ? doc(getDb(), 'wedstrijden', id) : doc(collection(getDb(), 'wedstrijden'))
   await setDoc(ref, zonderUndefined(rest))
+}
+
+// --- Trainersoverleg (fix-37) ----------------------------------------------
+
+/**
+ * Bewaart een overleg (nieuw: id null), eventueel met de notulen als bestand.
+ * `bijlage`: nieuw bestand, of null om het bewaarde bestand weg te halen.
+ */
+export function bewaarOverleg(id: string | null, velden: OverlegVelden, bijlage?: BijlageData | null) {
+  const db = getDb()
+  const ref = id ? doc(db, 'overleggen', id) : doc(collection(db, 'overleggen'))
+  const batch = writeBatch(db)
+  const data = zonderUndefined({ ...velden }) as Record<string, unknown>
+  if (id) {
+    if (velden.bijlage === undefined) data.bijlage = deleteField()
+    batch.update(ref, { ...data, gewijzigdOp: serverTimestamp() })
+  } else {
+    batch.set(ref, { ...data, status: 'concept', aangemaaktDoor: state.huidigeTrainerId, aangemaaktOp: serverTimestamp() })
+  }
+  if (bijlage) {
+    batch.set(doc(db, 'overlegBijlagen', ref.id), {
+      naam: bijlage.naam,
+      type: bijlage.type,
+      data: bijlage.data,
+      door: state.huidigeTrainerId,
+      op: serverTimestamp(),
+    })
+  } else if (bijlage === null) batch.delete(doc(db, 'overlegBijlagen', ref.id))
+  batch.commit().catch(meldFout('Overleg opslaan'))
+  return ref.id
+}
+
+/** Alleen de coördinator keurt de notulen goed (de regels controleren dat). */
+export function keurOverlegGoed(id: string) {
+  updateDoc(doc(getDb(), 'overleggen', id), {
+    status: 'goedgekeurd',
+    goedgekeurdDoor: state.huidigeTrainerId,
+    goedgekeurdOp: serverTimestamp(),
+    gewijzigdOp: serverTimestamp(),
+  }).catch(meldFout('Notulen goedkeuren'))
+}
+
+/** Een actie afvinken (of weer openzetten). */
+export function zetActieKlaar(o: Overleg, actieId: string, klaar: boolean) {
+  const punten = o.punten.map((p) => ({ ...p, acties: p.acties.map((a) => (a.id === actieId ? { ...a, klaar } : a)) }))
+  updateDoc(doc(getDb(), 'overleggen', o.id), { punten, gewijzigdOp: serverTimestamp() }).catch(meldFout('Actie bijwerken'))
+}
+
+export function verwijderOverleg(id: string) {
+  const batch = writeBatch(getDb())
+  batch.delete(doc(getDb(), 'overlegBijlagen', id))
+  batch.delete(doc(getDb(), 'overleggen', id))
+  batch.commit().catch(meldFout('Overleg verwijderen'))
 }
 
 export async function verwijderWedstrijd(id: string) {

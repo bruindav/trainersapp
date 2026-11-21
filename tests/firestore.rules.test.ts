@@ -1,3 +1,4 @@
+// Fix: fix-37 — trainersoverleg
 // Fix: fix-34 — trainingsvelden van het schema
 // Fix: fix-32 — bijlagen bij trainingen
 // Fix: fix-31 — ook de gever mag wijzigen en verwijderen
@@ -398,6 +399,86 @@ describe('rooster, trainingen en jaarplan', () => {
     await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's2'), { ...schema, doel: 'x'.repeat(2001) }))
     await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's3'), { ...schema, aandachtspunten: 'los' }))
     await assertFails(setDoc(doc(als(TRAINER), 'trainingen', 's4'), { ...schema, perBaan: Array(11).fill(schema.perBaan[0]) }))
+  })
+
+  it('trainersoverleg: trainer legt concept vast, wijzigt eigen concept; alleen coördinator keurt goed', async () => {
+    const overleg = (uid: string) => ({
+      datum: '2026-10-25',
+      titel: 'Trainersoverleg',
+      status: 'concept',
+      aanwezig: 'A, B',
+      gasten: '',
+      punten: [{ id: 'p1', titel: 'Toezicht', tekst: '...', acties: [{ id: 'a1', wie: 'A', wat: 'Bellen', klaar: false }] }],
+      afspraken: [{ id: 's1', onderwerp: 'Toezicht', tekst: 'Altijd iemand op de kant.' }],
+      belangrijkeData: [],
+      aangemaaktDoor: uid,
+      aangemaaktOp: serverTimestamp(),
+    })
+    const tdb = als(TRAINER)
+    await assertSucceeds(setDoc(doc(tdb, 'overleggen', 'o1'), overleg(TRAINER.uid)))
+    await assertSucceeds(getDoc(doc(als(HOOFD), 'overleggen', 'o1')))
+    // Niet meteen goedgekeurd, niet namens een ander.
+    await assertFails(setDoc(doc(tdb, 'overleggen', 'o2'), { ...overleg(TRAINER.uid), status: 'goedgekeurd' }))
+    await assertFails(setDoc(doc(tdb, 'overleggen', 'o3'), overleg(HOOFD.uid)))
+    // Eigen concept wijzigen mag; zelf goedkeuren niet.
+    await assertSucceeds(updateDoc(doc(tdb, 'overleggen', 'o1'), { titel: 'Overleg oktober', gewijzigdOp: serverTimestamp() }))
+    await assertFails(
+      updateDoc(doc(tdb, 'overleggen', 'o1'), {
+        status: 'goedgekeurd',
+        goedgekeurdDoor: TRAINER.uid,
+        goedgekeurdOp: serverTimestamp(),
+        gewijzigdOp: serverTimestamp(),
+      }),
+    )
+    // Coördinator keurt goed; daarna kan de trainer niets meer wijzigen of verwijderen.
+    const hdb = als(HOOFD)
+    await assertSucceeds(
+      updateDoc(doc(hdb, 'overleggen', 'o1'), {
+        status: 'goedgekeurd',
+        goedgekeurdDoor: HOOFD.uid,
+        goedgekeurdOp: serverTimestamp(),
+        gewijzigdOp: serverTimestamp(),
+      }),
+    )
+    await assertFails(updateDoc(doc(tdb, 'overleggen', 'o1'), { titel: 'X', gewijzigdOp: serverTimestamp() }))
+    await assertFails(deleteDoc(doc(tdb, 'overleggen', 'o1')))
+    await assertSucceeds(updateDoc(doc(hdb, 'overleggen', 'o1'), { titel: 'Y', gewijzigdOp: serverTimestamp() }))
+    // Een andere trainer mag een concept van een ander niet wijzigen.
+    await seed(async (db) => setDoc(doc(db, 'overleggen', 'o4'), { ...overleg(HOOFD.uid), aangemaaktOp: null }))
+    await assertFails(updateDoc(doc(tdb, 'overleggen', 'o4'), { titel: 'X', gewijzigdOp: serverTimestamp() }))
+    // Te veel punten of verkeerd type: nee.
+    await assertFails(setDoc(doc(tdb, 'overleggen', 'o5'), { ...overleg(TRAINER.uid), punten: 'los' }))
+    await assertFails(setDoc(doc(tdb, 'overleggen', 'o6'), { ...overleg(TRAINER.uid), extra: true }))
+    // Notulen-bestand: samen met het eigen concept; niet bij andermans overleg.
+    const batch = writeBatch(tdb)
+    batch.set(doc(tdb, 'overleggen', 'o7'), overleg(TRAINER.uid))
+    batch.set(doc(tdb, 'overlegBijlagen', 'o7'), {
+      naam: 'notulen.pdf',
+      type: 'application/pdf',
+      data: 'data:application/pdf;base64,JVBERi0=',
+      door: TRAINER.uid,
+      op: serverTimestamp(),
+    })
+    await assertSucceeds(batch.commit())
+    await assertFails(
+      setDoc(doc(tdb, 'overlegBijlagen', 'o4'), {
+        naam: 'x.pdf',
+        type: 'application/pdf',
+        data: 'data:',
+        door: TRAINER.uid,
+        op: serverTimestamp(),
+      }),
+    )
+    // Demo-account leest echte overleggen niet.
+    await assertFails(
+      getDoc(
+        doc(
+          env.authenticatedContext('demo', { email: 'demotrainer@demo.nu', firebase: { sign_in_provider: 'password' } } as never).firestore(),
+          'overleggen',
+          'o1',
+        ),
+      ),
+    )
   })
 
   it('alleen coördinator of jaarplanbeheerder wijzigt het jaarplan', async () => {

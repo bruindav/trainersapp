@@ -1,3 +1,4 @@
+// Fix: fix-37 — AppData met overleggen
 // Fix: fix-5 — nieuwe velden in testdata
 // Fix: fix-3 — rollen, taken en gedelegeerd teambeheer
 // Fix: fix-2 — testtrainers
@@ -34,6 +35,7 @@ function zet(huidigeTrainerId: string) {
     trainingen: [],
     jaarplan: STANDAARD_JAARPLAN,
     wedstrijden: [],
+    overleggen: [],
   }
   __zetTestData(d)
 }

@@ -1,10 +1,11 @@
+// Fix: fix-37 — demo: voorbeeld-trainersoverleg (de echte overleggen gaan niet mee)
 // Fix: fix-28 — demodata maken: kopieert de echte gegevens geanonimiseerd naar demo_*-collecties.
 //
 // Draait in GitHub Actions (workflow demo-data.yml) met het serviceaccount, dat
 // de Firestore-regels omzeilt. Lokaal: FIREBASE_ADMIN_PAD=<map met node_modules>
 // en GOOGLE_APPLICATION_CREDENTIALS=<sa.json>, dan `node scripts/maak-demo-data.ts`.
 //
-// Niet meegekopieerd: uitnodigingen, feedback en config (persoonlijk of niet nodig).
+// Niet meegekopieerd: uitnodigingen, feedback, config, bijlagen en overleggen (persoonlijk of niet nodig).
 import { createRequire } from 'node:module'
 
 import {
@@ -14,6 +15,7 @@ import {
   maakVertaling,
   telBeurten,
 } from '../src/data/demo-anonimiseer.ts'
+import { OVERLEG_VOORBEELD } from '../src/data/overleg-voorbeeld.ts'
 
 interface Snap {
   id: string
@@ -131,6 +133,12 @@ async function main() {
         }
       }
     }
+  }
+  // Trainersoverleg: echte notulen bevatten namen van mensen buiten het team, dus
+  // de demo krijgt alleen het voorbeeld (met verzonnen namen).
+  {
+    const { id, ...voorbeeld } = OVERLEG_VOORBEELD
+    await schrijf(db.collection(DEMO_PREFIX + 'overleggen').doc(id), JSON.parse(JSON.stringify(voorbeeld)))
   }
   if (inBatch) await batch.commit()
   console.log(

@@ -1,3 +1,4 @@
+// Fix: fix-37 — help: trainersoverleg
 // Fix: fix-35 — help: onderdelen verslepen
 // Fix: fix-32 — help: bijlagen en trainingsschema inlezen
 // Fix: fix-28 — help: demo met verzonnen namen
@@ -146,6 +147,16 @@ function HelpPagina() {
             Omlaag.
           </li>
         </ul>
+      </section>
+
+      <section id="overleg">
+        <h2>Trainersoverleg</h2>
+        <p>
+          Onder <strong>Overleg</strong> leg je een trainersoverleg vast: upload de notulen als bestand en/of zet de
+          agendapunten, acties en afspraken erin. Een nieuw overleg is een <strong>concept</strong> tot de coördinator de
+          notulen goedkeurt. Bovenaan de pagina staan alle afspraken per onderwerp en de acties die nog open staan. Wie
+          het overleg vastlegde (of de coördinator) kan acties afvinken.
+        </p>
       </section>
 
       <section id="jaarplan" className="scroll-mt-24">

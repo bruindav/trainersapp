@@ -1,3 +1,4 @@
+// Fix: fix-37 — ook notulen (overlegBijlagen) openen
 // Fix: fix-32 — bijlagen van trainingen bewaren in Firestore (bijlagen/{trainingId})
 //
 // Cloud Storage vraagt het betaalde Blaze-abonnement; daarom bewaren we het
@@ -81,8 +82,11 @@ function naarBlob(dataUrl: string) {
 }
 
 /** Haalt de bijlage op en opent/downloadt hem. Geeft false als hij niet bewaard is. */
-export async function openBijlage(trainingId: string): Promise<boolean> {
-  const snap = await getDoc(doc(getDb(), 'bijlagen', trainingId))
+export async function openBijlage(
+  id: string,
+  collectie: 'bijlagen' | 'overlegBijlagen' = 'bijlagen',
+): Promise<boolean> {
+  const snap = await getDoc(doc(getDb(), collectie, id))
   if (!snap.exists()) return false
   const b = snap.data() as BijlageData
   const url = URL.createObjectURL(naarBlob(b.data))

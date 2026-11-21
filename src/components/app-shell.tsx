@@ -1,3 +1,4 @@
+// Fix: fix-37 — menu: Trainersoverleg
 // Fix: fix-20 — Help in het menu; footer met help/privacy/disclaimer en digidave + fix-nummer
 // Fix: fix-16 — feedbackknop op elk scherm; menu-item Feedback voor de coördinator
 // Fix: fix-11 — open-plek-balk onder de kop
@@ -5,7 +6,7 @@
 // Fix: fix-3 — rol met taken tonen
 // Fix: fix-1 — accountmenu (Firebase) i.p.v. trainerwisselaar; navigatie-item Team
 import { Link } from '@tanstack/react-router'
-import { CalendarCheck, CalendarRange, CircleHelp, ClipboardList, Inbox, LayoutDashboard, LogOut, Menu, Users, Waves } from 'lucide-react'
+import { CalendarCheck, CalendarRange, CircleHelp, ClipboardList, Inbox, LayoutDashboard, LogOut, Menu, MessagesSquare, Users, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ReactNode } from 'react'
 
@@ -34,6 +35,7 @@ const NAV = [
   { to: '/periodes', label: 'Periodes', icon: CalendarCheck },
   { to: '/jaarplan', label: 'Jaarplan', icon: CalendarRange },
   { to: '/trainingen', label: 'Trainingen', icon: ClipboardList },
+  { to: '/overleg', label: 'Overleg', icon: MessagesSquare },
   { to: '/team', label: 'Team', icon: Users },
 ] as const
 
@@ -153,15 +155,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
         <div className="mx-auto flex h-16 max-w-content items-center gap-4 px-4 sm:px-6">
           <Logo />
-          <nav aria-label="Hoofdmenu" className="ml-6 hidden items-center gap-1 md:flex">
+          <nav aria-label="Hoofdmenu" className="ml-4 hidden items-center gap-0.5 lg:flex xl:ml-6 xl:gap-1">
             {NAV.map(({ to, label, icon: Icon }) => (
               <Link
                 key={to}
                 to={to}
                 activeOptions={{ exact: to === '/' }}
-                className="flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground motion-reduce:transition-none data-[status=active]:bg-primary data-[status=active]:text-primary-foreground"
+                className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground motion-reduce:transition-none data-[status=active]:bg-primary data-[status=active]:text-primary-foreground"
               >
-                <Icon className="size-4" aria-hidden />
+                {/* fix-37: met zeven items alleen op brede schermen een icoon, zodat alles op één regel past */}
+                <Icon className="hidden size-4 xl:block" aria-hidden />
                 {label}
               </Link>
             ))}
@@ -170,7 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AccountMenu />
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Menu openen">
+                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Menu openen">
                   <Menu />
                 </Button>
               </SheetTrigger>
