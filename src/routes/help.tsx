@@ -1,3 +1,4 @@
+// Fix: fix-38 — versie bovenaan de helppagina (lang drukken = testoverzicht)
 // Fix: fix-37 — help: trainersoverleg
 // Fix: fix-35 — help: onderdelen verslepen
 // Fix: fix-32 — help: bijlagen en trainingsschema inlezen
@@ -10,6 +11,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { InfoPagina } from '@/components/info-pagina'
+import { VersieNummer } from '@/components/versie-nummer'
 
 export const Route = createFileRoute('/help')({
   head: () => ({ meta: [{ title: 'Help · NatUtrecht Trainersapp' }] }),
@@ -24,6 +26,7 @@ const ONDERWERPEN = [
   ['open-plek', 'Een open plek overnemen'],
   ['trainingen', 'Trainingen vastleggen'],
   ['jaarplan', 'Jaarplan en wedstrijden'],
+  ['overleg', 'Trainersoverleg'],
   ['feedback', 'Feedback geven'],
   ['coordinator', 'Voor de coördinator'],
   ['installeren', 'De app op je telefoon zetten'],
@@ -36,6 +39,13 @@ function HelpPagina() {
       titel="Hoe werkt de Trainersapp?"
       intro={<p>Korte uitleg per onderwerp. Kom je er niet uit? Stuur feedback met de knop rechtsonder of vraag de coördinator.</p>}
     >
+      {/* fix-38: altijd zichtbaar welke versie je test */}
+      <p className="flex flex-wrap items-center gap-x-2 rounded-xl border-2 border-primary/30 p-4 text-sm">
+        <span>Je gebruikt versie</span>
+        <VersieNummer className="rounded-full bg-primary px-3 py-0.5 font-black text-primary-foreground" />
+        <span className="text-muted-foreground">Noem dit nummer als je een probleem meldt.</span>
+      </p>
+
       <nav aria-label="Onderwerpen" className="rounded-xl bg-muted p-4">
         <p className="mb-2 font-bold">Onderwerpen</p>
         <ul className="grid gap-1 sm:grid-cols-2">
@@ -149,7 +159,7 @@ function HelpPagina() {
         </ul>
       </section>
 
-      <section id="overleg">
+      <section id="overleg" className="scroll-mt-24">
         <h2>Trainersoverleg</h2>
         <p>
           Onder <strong>Overleg</strong> leg je een trainersoverleg vast: upload de notulen als bestand en/of zet de

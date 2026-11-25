@@ -1,9 +1,10 @@
+// Fix: fix-38 — fixnummer los van de link, lang drukken = testoverzicht
 // Fix: fix-20 — opmaak voor help, privacy en disclaimer; ook te lezen zonder in te loggen
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { PageHeader } from '@/components/app-shell'
-import { VERSIE } from '@/versie'
+import { VersieNummer } from '@/components/versie-nummer'
 
 export function InfoPagina({
   eyebrow,
@@ -25,7 +26,8 @@ export function InfoPagina({
         {children}
         <p className="border-t pt-6 text-sm text-muted-foreground">
           {bijgewerkt && <>Laatst bijgewerkt: {bijgewerkt} · </>}
-          Versie van de app: <strong className="text-foreground">{VERSIE}</strong>
+          Versie van de app:{' '}
+          <VersieNummer className="font-bold text-foreground" />
         </p>
       </article>
     </>
@@ -60,17 +62,22 @@ export function InfoLinks({ className = '', gewoneLinks = false }: { className?:
 /** Het digidave-merkje: wie de app maakt, met het fix-nummer. */
 export function GemaaktDoor({ className = '' }: { className?: string }) {
   return (
-    <a
-      href="https://bruindav.github.io/DigidaveStore/"
-      target="_blank"
-      rel="noreferrer"
-      className={`inline-flex items-center gap-2 underline-offset-2 hover:underline ${className}`}
-    >
-      <img src="/img/digidave.png" alt="" width={24} height={24} className="size-6" />
-      <span>
-        gemaakt door <span className="font-semibold">digidave</span> · {VERSIE}
-      </span>
-    </a>
+    <span className={`inline-flex items-center gap-2 ${className}`}>
+      <a
+        href="https://bruindav.github.io/DigidaveStore/"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 underline-offset-2 hover:underline"
+      >
+        <img src="/img/digidave.png" alt="" width={24} height={24} className="size-6" />
+        <span>
+          gemaakt door <span className="font-semibold">digidave</span>
+        </span>
+      </a>
+      {/* fix-38: het fixnummer staat los van de link; lang drukken opent het testoverzicht. */}
+      <span aria-hidden>·</span>
+      <VersieNummer />
+    </span>
   )
 }
 

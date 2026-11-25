@@ -1,3 +1,4 @@
+# Fix: fix-38 — volledige git-geschiedenis (testoverzicht per fix) en Playwright-tests met rapport
 # Fix: fix-22 — testlink per fix-branch (Firebase-voorbeeldkanaal, 14 dagen geldig)
 # Fix: fix-2 — actions bijgewerkt naar Node 24-versies
 # Fix: fix-1 — bouwen, testen en deployen naar Firebase Hosting + Firestore-regels
@@ -20,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Hele geschiedenis: nodig voor het testoverzicht per fix.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -37,6 +41,17 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm test:rules
+      - name: Playwright-browser installeren
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end-tests (Playwright)
+        run: pnpm test:e2e
+      - name: Playwright-rapport bewaren
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-rapport
+          path: playwright-report/
+          retention-days: 14
 
   deploy:
     needs: test
@@ -44,6 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Hele geschiedenis: nodig voor het testoverzicht per fix.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -89,6 +107,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Hele geschiedenis: nodig voor het testoverzicht per fix.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10

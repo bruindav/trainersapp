@@ -11,3 +11,7 @@ firestore-debug.log
 # Service-account-sleutels horen nooit in de repo
 *service-account*.json
 *-firebase-adminsdk-*.json
+# Fix: fix-38 — Playwright-uitvoer
+test-results/
+playwright-report/
+blob-report/

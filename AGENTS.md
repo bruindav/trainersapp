@@ -5,6 +5,7 @@
 <!-- Fix: fix-1 — bijgewerkt voor Firebase (Auth, Firestore, Hosting) -->
 # AGENTS.md
 
+<!-- Fix: fix-38 — fixnummer + testoverzicht, Playwright e2e, test-agent -->
 <!-- Fix: fix-37 — trainersoverleg -->
 <!-- Fix: fix-35 — onderdelen verslepen -->
 <!-- Fix: fix-34 — training in de opbouw van het trainingsschema -->
@@ -37,7 +38,7 @@ This document describes the project for developers and AI agents working on this
 - Always start from the latest `main` of `github.com/bruindav/trainersapp`.
 - Every change goes on a new branch `fix-N` (numbered upwards). Put `Fix: fix-N` in a comment in every changed file where comments are allowed.
 - The owner reviews; after his approval the fix branch is merged into `main` (which deploys).
-- Specialist agents live in `.claude/agents/`: `ontwerp` (functional design), `bouw` (secure code + rules), `ui` (screen design).
+- Specialist agents live in `.claude/agents/`: `ontwerp` (functional design), `bouw` (secure code + rules), `ui` (screen design), `test` (Playwright e2e, Vitest, rules tests; fix-38).
 
 ### Tech Stack
 
@@ -199,6 +200,7 @@ pnpm typecheck     # Type-check with tsc; the build doesn't
 pnpm lint          # Check TypeScript and React Hooks rules
 pnpm test          # Unit, component and page smoke tests (run build first)
 pnpm test:rules    # Firestore rules tests in the emulator (needs Java)
+pnpm test:e2e      # Playwright end-to-end tests (e2e/), phone + desktop, against vite.e2e.config.ts (fix-38)
 pnpm preview       # Preview the production build
 ```
 
@@ -209,7 +211,7 @@ pnpm preview       # Preview the production build
 - TypeScript fails on unused locals and parameters, so remove what you don't use.
 - Use React hooks for state.
 - Run the dev server or build once to generate route types before type-checking a fresh copy.
-- Run build, typecheck, lint, tests and rules tests before reporting completion. Verify changed user flows locally; a passing build doesn't prove an interaction works.
+- Run build, typecheck, lint, tests, rules tests and e2e tests before reporting completion. Mention in the delivery message which tests were added or changed. Verify changed user flows locally; a passing build doesn't prove an interaction works.
 
 ## Product decisions (non-obvious)
 
@@ -225,7 +227,9 @@ pnpm preview       # Preview the production build
 - **New roster design**: see `docs/rooster-ontwerp.md` (bouwplan there). Trainings on Dutch holidays are flagged (`feestdag`), not removed; the coordinator decides.
 - **Invites & login** (fix-19): login is Google only (the free plan allows just 5 email-link mails/day). Inviting creates `uitnodigingen/{email}` and immediately sends an invitation mail via **EmailJS** (`src/lib/mail.ts`, same service/public key as HornetApp and VvE e-learning, the generic template with `email`, `to_name`, `email_subject`, `email_body`); fallback is a mailto from the coordinator's own mail client. EmailJS free = 200 mails/month shared by all projects.
 - **Login** uses Google, which proves ownership of the address (`email_verified`); invites are matched on that verified address. (Code to finish an old email link still exists in `auth.ts`.)
-- **Version** (fix-20): `src/versie.ts` exposes `VERSIE`, filled at build time by `vite.config.ts` from the last commit subject (`fix-N: …`), shown in the footer and on the info pages. So every fix commit must start with `fix-N:`.
+- **Version** (fix-20): `src/versie.ts` exposes `VERSIE`, filled at build time by `vite.config.ts` from the last commit subject (`fix-N: …`), shown in the footer, on the info pages and prominently at the top of the help page (fix-38). So every fix commit must start with `fix-N:`.
+- **Testoverzicht** (fix-38): long-press (800 ms; or hold Enter/Space) on the version number (`VersieNummer`) opens a hidden dialog listing, per fix, the test files added/changed and the test names involved, with GitHub links. Built at build time from git history by `scripts/testoverzicht.ts` (virtual module `virtual:testoverzicht`, lazy-loaded chunk); CI checks out with `fetch-depth: 0`. Changed test names = tests enclosing the changed lines (comments/blank lines ignored).
+- **Playwright** (fix-38): `e2e/*.spec.ts`, config `playwright.config.ts` (projects `telefoon` = Pixel 7 and `desktop`), app served by `vite.e2e.config.ts` which aliases `@/data/auth` and `@/data/store` to `e2e/mock/` (always logged in as a coordinator; writes stay in memory, never Firestore). CI installs Chromium, runs `pnpm test:e2e` and uploads the HTML report as artifact `playwright-rapport` (with traces of failures). Tests are written as learning material: Dutch names, role/label locators, comments.
 - **iOS** (fix-20): build target includes Safari 15; `apple-touch-icon.png` for the home screen; Google login uses a popup (redirect breaks on Safari); Google blocks login inside in-app browsers, the error tells users to open Safari.
 - **Jaarplan** (fix-21): two views. *Trainingsopbouw* follows the Word document: per opbouw (one per build-up to a target competition, e.g. Sept–Dec → Frankfurt, after the Christmas break → EuroGames) an inleiding, aandachtsgebieden and fases with zones and example sets; zones are season-wide. *Seizoensoverzicht* is the original block view, kept as an alternative (owner's wish). Every edit sets status back to `concept`; publishing bumps `versie`. Rich texts are stored as HTML and always rendered through `maakVeilig` (DOMPurify: formatting tags only, `style` reduced to `color`). Competitions live in their own collection; a later import from the club calendar is a wish.
 - **Demo-account** (fix-27, fix-28): `demotrainer@demo.nu` signs in with email/password (Email/Password provider in Firebase). The password is never in the code; the owner hands it out. `bepaalToegang` lets it in before the emailVerified check as trainer `DEMO_TRAINER_ID` (`demo-trainer`). It never reads real data: `startSync(..., demo)` reads the `demo_*` collections instead (`demo_trainers`, `demo_roosterperiodes/{id}/demo_beschikbaarheid`, …; the subcollections are renamed so collection-group queries never mix real and demo data). Rules: `leest()` is trainers only; `demo_*` is readable by the demo account and coordinators, writable by nobody (only the service account). Feedback from the demo account is stored with the auth uid.

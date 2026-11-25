@@ -1,3 +1,4 @@
+// Fix: fix-38 — testoverzicht per fix (virtuele module) en e2e-tests
 // Fix: fix-20 — versie (fix-nummer) uit de laatste commit
 // Fix: fix-1 — Netlify/TanStack Start vervangen door een statische SPA voor Firebase Hosting
 import { defineConfig } from 'vite'
@@ -5,6 +6,7 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { execSync } from 'node:child_process'
+import { testoverzichtPlugin } from './scripts/testoverzicht.ts'
 
 /** "fix-20" uit de laatste commit ("fix-20: …"); anders "dev". */
 function versie() {
@@ -21,7 +23,12 @@ const config = defineConfig({
   define: { __VERSIE__: JSON.stringify(versie()) },
   // Ook oudere iPhones (iOS 15) moeten de app kunnen draaien.
   build: { target: ['es2020', 'safari15', 'chrome100', 'firefox100', 'edge100'] },
-  plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), tailwindcss(), viteReact()],
+  plugins: [
+    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    tailwindcss(),
+    viteReact(),
+    testoverzichtPlugin(),
+  ],
 })
 
 export default config
